@@ -182,12 +182,8 @@ UIWidget
   local spellName = fugaData.text or ("Fuga #" .. displayIndex)
   screenWidget.statusText:setText(spellName .. " | PRONTA")
 
-  -- Visibilidade conforme checkbox
-  if storage.esp_fugas_widgets_show[uid] then
-    screenWidget:show()
-  else
-    screenWidget:hide()
-  end
+  -- Sempre visivel quando criado (so e criado se checkbox ativo)
+  screenWidget:show()
 
   fugaScreenWidgets[uid] = screenWidget
   return screenWidget
@@ -212,7 +208,7 @@ local function createFugaWidget(index, fugaData)
   local uid = fugaData.uid
   local entry = setupUI([[
 Panel
-  height: 230
+  height: 260
   margin-top: 3
 
   Label
@@ -256,7 +252,7 @@ Panel
     anchors.top: lbl1.bottom
     anchors.left: parent.left
     anchors.right: parent.right
-    height: 18
+    height: 22
     margin-top: 1
 
   Panel
@@ -264,7 +260,7 @@ Panel
     anchors.top: spellEdit.bottom
     anchors.left: parent.left
     anchors.right: parent.right
-    height: 20
+    height: 24
     margin-top: 3
     Label
       anchors.left: parent.left
@@ -284,7 +280,7 @@ Panel
     anchors.top: row1.bottom
     anchors.left: parent.left
     anchors.right: parent.right
-    height: 20
+    height: 24
     margin-top: 2
     Label
       anchors.left: parent.left
@@ -304,7 +300,7 @@ Panel
     anchors.top: row2.bottom
     anchors.left: parent.left
     anchors.right: parent.right
-    height: 20
+    height: 24
     margin-top: 2
     Label
       anchors.left: parent.left
@@ -324,7 +320,7 @@ Panel
     anchors.top: row3.bottom
     anchors.left: parent.left
     anchors.right: parent.right
-    height: 20
+    height: 24
     margin-top: 2
     Label
       anchors.left: parent.left
@@ -344,7 +340,7 @@ Panel
     anchors.top: row4.bottom
     anchors.left: parent.left
     anchors.right: parent.right
-    height: 20
+    height: 24
     margin-top: 2
     Label
       anchors.left: parent.left
@@ -364,7 +360,7 @@ Panel
     anchors.top: row5.bottom
     anchors.left: parent.left
     anchors.right: parent.right
-    height: 20
+    height: 24
     margin-top: 2
     Label
       anchors.left: parent.left
@@ -390,6 +386,22 @@ Panel
   entry.row5.qtdEdit:setText(tostring(fugaData.quantidade or 1))
   entry.row6.cdQtdEdit:setText(tostring(fugaData.cdQuantidade or 2))
 
+  -- Tooltips explicativos para cada campo
+  entry.spellEdit:setTooltip("Nome da spell de fuga que sera usada (ex: utani hur)")
+  entry.row1.hpEdit:setTooltip("Porcentagem de HP para ativar a fuga (ex: 50 = ativa quando HP <= 50%)")
+  entry.row2.activeEdit:setTooltip("Tempo em segundos que a fuga fica ativa apos ser usada")
+  entry.row3.cdEdit:setTooltip("Tempo de cooldown em segundos apos usar todas as cargas")
+  entry.row4.orderEdit:setTooltip("Prioridade da fuga (menor numero = maior prioridade)")
+  entry.row5.qtdEdit:setTooltip("Quantidade de vezes que vai usar antes de entrar em cooldown")
+  entry.row6.cdQtdEdit:setTooltip("Cooldown em segundos entre cada uso quando tem multiplas cargas")
+
+  -- Estilo: fundo transparente e texto neon azul nos inputs
+  local fugaInputs = {entry.spellEdit, entry.row1.hpEdit, entry.row2.activeEdit, entry.row3.cdEdit, entry.row4.orderEdit, entry.row5.qtdEdit, entry.row6.cdQtdEdit}
+  for _, input in ipairs(fugaInputs) do
+    input:setBackgroundColor("#00000033")
+    input:setColor("#00DDFF")
+  end
+
   -- Checkbox "mostrar na tela"
   entry.showOnScreen:setChecked(storage.esp_fugas_widgets_show[uid] or false)
   entry.showOnScreen.onClick = function(w)
@@ -409,8 +421,10 @@ Panel
     end
   end
 
-  -- Criar widget na tela se checkbox ativo
-  createFugaScreenWidget(uid, fugaData, index)
+  -- Criar widget na tela somente se checkbox ativo (evita duplicacao no restart)
+  if storage.esp_fugas_widgets_show[uid] then
+    createFugaScreenWidget(uid, fugaData, index)
+  end
 
   entry.spellEdit.onTextChange = function(w, text)
     storage.esp_fugas_list[index].text = text
@@ -551,27 +565,43 @@ macro(200, function()
   end
 end)
 
--- Auto Kai: usa kai automaticamente quando paralizado ou lento
+-- Kai: usa kai automaticamente quando paralizado ou lento
 if not storage.esp_auto_kai then
-  storage.esp_auto_kai = { enabled = false, spell = "utani hur" }
+  storage.esp_auto_kai = { enabled = false, spell = "kai" }
 end
 
 UI.Separator(fugasContent)
-color = UI.Label("Auto Kai (Anti-Paralyze):", fugasContent)
+color = UI.Label("Kai (Anti-Paralyze):", fugasContent)
 color:setColor("#FF88FF")
 
-local autoKaiMacro = macro(100, "Auto Kai", function()
+local autoKaiMacro = macro(100, "Kai", function()
   if isInPz() then return end
-  local spellKai = storage.esp_auto_kai.spell or "utani hur"
+  local spellKai = storage.esp_auto_kai.spell or "kai"
   if spellKai:len() == 0 then return end
   if isParalyzed() and not getSpellCoolDown(spellKai) then
     say(spellKai)
   end
 end, fugasContent)
 
-addTextEdit("esp_auto_kai_spell", storage.esp_auto_kai.spell or "utani hur", function(widget, text)
+addTextEdit("esp_auto_kai_spell", storage.esp_auto_kai.spell or "kai", function(widget, text)
   storage.esp_auto_kai.spell = text
 end, fugasContent)
+
+-- Estilo neon azul para input do kai
+schedule(100, function()
+  local function styleFugasAddTextEdits(widget)
+    if not widget then return end
+    local children = widget:getChildren()
+    if not children then return end
+    for _, child in ipairs(children) do
+      if child.getClassName and child:getClassName() == "TextEdit" and child:getId() == "esp_auto_kai_spell" then
+        child:setBackgroundColor("#00000033")
+        child:setColor("#00DDFF")
+      end
+    end
+  end
+  styleFugasAddTextEdits(fugasContent)
+end)
 
 UI.Separator(fugasContent)
 
@@ -709,6 +739,23 @@ addTextEdit("esp_trap_6", storage.esp_trap.text6 or "trap 6", function(widget, t
   storage.esp_trap.text6 = text
 end, trapsContent)
 
+-- Estilo: fundo transparente e texto neon azul nos inputs de traps
+schedule(100, function()
+  local function styleTextEdits(widget)
+    if not widget then return end
+    local children = widget:getChildren()
+    if not children then return end
+    for _, child in ipairs(children) do
+      if child.getClassName and child:getClassName() == "TextEdit" then
+        child:setBackgroundColor("#00000033")
+        child:setColor("#00DDFF")
+      end
+      styleTextEdits(child)
+    end
+  end
+  styleTextEdits(trapsContent)
+end)
+
 
 -- =============================================
 -- TAB: COMBOS (dinamico - adicionar/remover)
@@ -742,7 +789,7 @@ local comboWidgets = {}
 local function createComboWidget(index, comboData)
   local entry = setupUI([[
 Panel
-  height: 50
+  height: 54
   margin-top: 3
 
   Label
@@ -767,13 +814,17 @@ Panel
     anchors.top: title.bottom
     anchors.left: parent.left
     anchors.right: parent.right
-    height: 18
+    height: 22
     margin-top: 3
 
   ]], combosContent)
 
   entry.title:setText("Combo #" .. index)
   entry.spellEdit:setText(comboData.text or "")
+
+  -- Estilo: fundo transparente e texto neon azul
+  entry.spellEdit:setBackgroundColor("#00000033")
+  entry.spellEdit:setColor("#00DDFF")
 
   entry.spellEdit.onTextChange = function(w, text)
     storage.esp_combo_list[index].text = text
@@ -874,7 +925,7 @@ local function createBuffWidget(index, buffData)
   local uid = buffData.uid
   local entry = setupUI([[
 Panel
-  height: 120
+  height: 132
   margin-top: 3
 
   Label
@@ -908,7 +959,7 @@ Panel
     anchors.top: lbl1.bottom
     anchors.left: parent.left
     anchors.right: parent.right
-    height: 18
+    height: 22
     margin-top: 1
 
   Panel
@@ -916,7 +967,7 @@ Panel
     anchors.top: spellEdit.bottom
     anchors.left: parent.left
     anchors.right: parent.right
-    height: 20
+    height: 24
     margin-top: 3
     Label
       anchors.left: parent.left
@@ -936,7 +987,7 @@ Panel
     anchors.top: row1.bottom
     anchors.left: parent.left
     anchors.right: parent.right
-    height: 20
+    height: 24
     margin-top: 2
     Label
       anchors.left: parent.left
@@ -957,6 +1008,13 @@ Panel
   entry.spellEdit:setText(buffData.text or "")
   entry.row1.activeEdit:setText(tostring(buffData.activeTime or 10))
   entry.row2.cdEdit:setText(tostring(buffData.cooldown or 30))
+
+  -- Estilo: fundo transparente e texto neon azul nos inputs
+  local buffInputs = {entry.spellEdit, entry.row1.activeEdit, entry.row2.cdEdit}
+  for _, input in ipairs(buffInputs) do
+    input:setBackgroundColor("#00000033")
+    input:setColor("#00DDFF")
+  end
 
   entry.spellEdit.onTextChange = function(w, text)
     storage.esp_buffs_list[index].text = text
@@ -1059,6 +1117,455 @@ end
     EspeciaisWindow:raise()
     EspeciaisWindow:focus()
   end
+
+UI.Separator()
+
+-- =============================================
+-- PERFIS - Sistema de perfis por personagem
+-- =============================================
+do
+  local perfilConfigName = modules.game_bot.contentsPanel.config:getCurrentOption().text
+  local PERFIS_DIR = "/bot/" .. perfilConfigName .. "/vBot_perfis/"
+
+  -- Criar diretorio de perfis se nao existir
+  if not g_resources.directoryExists(PERFIS_DIR) then
+    g_resources.makeDir(PERFIS_DIR)
+  end
+
+  -- Storage para perfis
+  if type(storage.perfis_data) ~= "table" then
+    storage.perfis_data = {}
+  end
+  if not storage.perfis_current then
+    storage.perfis_current = nil
+  end
+
+  -- Funcao para sanitizar nome de arquivo
+  local function sanitizeName(name)
+    return name:gsub("[^%w_%-]", "_")
+  end
+
+  -- Funcao para coletar dados do perfil atual
+  local function collectProfileData()
+    local data = {}
+    -- Fugas
+    data.esp_fugas_list = storage.esp_fugas_list or {}
+    data.esp_fugas_widgets_show = storage.esp_fugas_widgets_show or {}
+    data.esp_fugas_widgets_pos = storage.esp_fugas_widgets_pos or {}
+    -- Traps
+    data.esp_trap = storage.esp_trap or {}
+    -- Combos
+    data.esp_combo_list = storage.esp_combo_list or {}
+    -- Buffs
+    data.esp_buffs_list = storage.esp_buffs_list or {}
+    -- Kai
+    data.esp_auto_kai = storage.esp_auto_kai or {}
+    -- Ingame scripts
+    data.ingame_hotkeys = storage.ingame_hotkeys or ""
+    -- Background
+    data.bgPlayer = storage.bgPlayer or {}
+    return data
+  end
+
+  -- Funcao para salvar perfil em arquivo
+  local function saveProfile(charName)
+    if not charName or charName:len() == 0 then return end
+    local data = collectProfileData()
+    local fileName = PERFIS_DIR .. sanitizeName(charName) .. ".json"
+    local status, result = pcall(function()
+      return json.encode(data, 2)
+    end)
+    if status and result then
+      g_resources.writeFileContents(fileName, result)
+      storage.perfis_current = charName
+      -- Salvar na lista de perfis conhecidos
+      if not table.find(storage.perfis_data, charName) then
+        table.insert(storage.perfis_data, charName)
+      end
+    end
+  end
+
+  -- Funcao para carregar perfil de arquivo
+  local function loadProfile(charName)
+    if not charName or charName:len() == 0 then return false end
+    local fileName = PERFIS_DIR .. sanitizeName(charName) .. ".json"
+    if not g_resources.fileExists(fileName) then return false end
+
+    local status, data = pcall(function()
+      return json.decode(g_resources.readFileContents(fileName))
+    end)
+    if not status or not data then return false end
+
+    -- Aplicar dados do perfil
+    if data.esp_fugas_list then storage.esp_fugas_list = data.esp_fugas_list end
+    if data.esp_fugas_widgets_show then storage.esp_fugas_widgets_show = data.esp_fugas_widgets_show end
+    if data.esp_fugas_widgets_pos then storage.esp_fugas_widgets_pos = data.esp_fugas_widgets_pos end
+    if data.esp_trap then storage.esp_trap = data.esp_trap end
+    if data.esp_combo_list then storage.esp_combo_list = data.esp_combo_list end
+    if data.esp_buffs_list then storage.esp_buffs_list = data.esp_buffs_list end
+    if data.esp_auto_kai then storage.esp_auto_kai = data.esp_auto_kai end
+    if data.ingame_hotkeys ~= nil then storage.ingame_hotkeys = data.ingame_hotkeys end
+    if data.bgPlayer then storage.bgPlayer = data.bgPlayer end
+
+    storage.perfis_current = charName
+
+    -- Aplicar background se salvo
+    if storage.bgPlayer and storage.bgPlayer.currentBG then
+      schedule(300, function()
+        if applyBG then applyBG(storage.bgPlayer.currentBG) end
+      end)
+    end
+
+    -- Recarregar UI das fugas/combos/buffs
+    schedule(200, function()
+      if refreshFugas then refreshFugas() end
+      if refreshCombos then refreshCombos() end
+      if refreshBuffs then refreshBuffs() end
+    end)
+
+    return true
+  end
+
+  -- Funcao para listar perfis salvos
+  local function listProfiles()
+    local profiles = {}
+    if g_resources.directoryExists(PERFIS_DIR) then
+      local files = g_resources.listDirectoryFiles(PERFIS_DIR, false, false)
+      for _, file in ipairs(files) do
+        if file:find("%.json$") then
+          local name = file:gsub("%.json$", "")
+          table.insert(profiles, name)
+        end
+      end
+    end
+    return profiles
+  end
+
+  -- Funcao para deletar perfil
+  local function deleteProfile(charName)
+    if not charName or charName:len() == 0 then return end
+    local fileName = PERFIS_DIR .. sanitizeName(charName) .. ".json"
+    if g_resources.fileExists(fileName) then
+      g_resources.writeFileContents(fileName, "")
+    end
+    -- Remover da lista
+    for i, name in ipairs(storage.perfis_data) do
+      if name == charName then
+        table.remove(storage.perfis_data, i)
+        break
+      end
+    end
+  end
+
+  -- UI do botao Perfis
+  local perfisPanelName = "perfisPanel"
+  local perfisUI = setupUI([[
+Panel
+  height: 35
+
+  Button
+    id: editPerfis
+    color: #00DDFF
+    font: verdana-11px-rounded
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 35
+    text: - PERFIS -
+
+  ]], parent)
+  perfisUI:setId(perfisPanelName)
+
+  -- Janela de perfis
+  local PerfisWindow
+  rootWidget = g_ui.getRootWidget()
+  if rootWidget then
+    PerfisWindow = g_ui.loadUIFromString([[
+MainWindow
+  !text: tr('- Perfis -')
+  size: 350 420
+  color: #00DDFF
+  @onEscape: self:hide()
+
+  Label
+    id: currentLabel
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text: Perfil atual: Nenhum
+    text-align: center
+    font: verdana-11px-rounded
+    color: #00FF88
+    height: 20
+
+  Label
+    id: charLabel
+    anchors.top: currentLabel.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text: Personagem: --
+    text-align: center
+    font: verdana-11px-rounded
+    color: #AADDFF
+    height: 20
+    margin-top: 5
+
+  TextList
+    id: profileList
+    anchors.top: charLabel.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 200
+    margin-top: 10
+    vertical-scrollbar: profileScrollBar
+    focusable: false
+
+  VerticalScrollBar
+    id: profileScrollBar
+    anchors.top: profileList.top
+    anchors.bottom: profileList.bottom
+    anchors.right: profileList.right
+    step: 14
+    pixels-scroll: true
+
+  Panel
+    id: controls
+    anchors.top: profileList.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 30
+    margin-top: 10
+
+    Button
+      id: saveBtn
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: Salvar
+      width: 65
+      height: 25
+      color: #00FF88
+
+    Button
+      id: loadBtn
+      anchors.left: saveBtn.right
+      anchors.verticalCenter: parent.verticalCenter
+      text: Carregar
+      width: 65
+      height: 25
+      margin-left: 5
+      color: #FFDD00
+
+    Button
+      id: deleteBtn
+      anchors.left: loadBtn.right
+      anchors.verticalCenter: parent.verticalCenter
+      text: Deletar
+      width: 65
+      height: 25
+      margin-left: 5
+      color: #FF4444
+
+    Button
+      id: refreshBtn
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      text: Refresh
+      width: 55
+      height: 25
+
+  Label
+    id: statusLabel
+    anchors.top: controls.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text: --
+    text-align: center
+    font: verdana-11px-rounded
+    color: white
+    height: 20
+    margin-top: 5
+
+  Button
+    id: closeButton
+    !text: tr('Close')
+    font: cipsoftFont
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    size: 45 21
+    margin-top: 5
+    margin-right: 5
+]], rootWidget)
+    PerfisWindow:hide()
+
+    local selectedProfile = nil
+    local selectedProfileWidget = nil
+
+    local function selectProfileEntry(widget)
+      if selectedProfileWidget then
+        selectedProfileWidget:setBackgroundColor("alpha")
+        selectedProfileWidget:setColor("white")
+      end
+      selectedProfileWidget = widget
+      selectedProfile = widget.profileName
+      widget:setBackgroundColor("#ffffff33")
+      widget:setColor("#00DDFF")
+    end
+
+    local function refreshProfileList()
+      PerfisWindow.profileList:destroyChildren()
+      selectedProfile = nil
+      selectedProfileWidget = nil
+
+      local profiles = listProfiles()
+      if #profiles == 0 then
+        local label = g_ui.createWidget("Label", PerfisWindow.profileList)
+        label:setText("Nenhum perfil salvo")
+        label:setColor("gray")
+        label:setFont("verdana-11px-rounded")
+        return
+      end
+
+      for _, name in ipairs(profiles) do
+        local label = g_ui.createWidget("Label", PerfisWindow.profileList)
+        label:setText(name)
+        label:setFont("verdana-11px-rounded")
+        label:setColor("white")
+        label:setHeight(18)
+        label:setTextOffset({x = 3, y = 0})
+        label.profileName = name
+
+        -- Destacar perfil atual
+        if storage.perfis_current and sanitizeName(storage.perfis_current) == name then
+          label:setColor("#00FF88")
+        end
+
+        label.onMouseRelease = function(widget, mousePos, mouseButton)
+          if mouseButton == MouseLeftButton then
+            selectProfileEntry(widget)
+            return true
+          end
+        end
+
+        label.onDoubleClick = function(widget)
+          selectProfileEntry(widget)
+          loadProfile(name)
+          PerfisWindow.statusLabel:setText("Perfil '" .. name .. "' carregado!")
+          PerfisWindow.statusLabel:setColor("#00FF88")
+          refreshProfileList()
+          return true
+        end
+      end
+    end
+
+    -- Atualizar info do personagem atual
+    local function updateCharInfo()
+      local charName = player and player:getName() or "--"
+      PerfisWindow.charLabel:setText("Personagem: " .. charName)
+      if storage.perfis_current then
+        PerfisWindow.currentLabel:setText("Perfil atual: " .. storage.perfis_current)
+      else
+        PerfisWindow.currentLabel:setText("Perfil atual: Nenhum")
+      end
+    end
+
+    -- Salvar automaticamente ao detectar personagem
+    local function autoSaveCurrentProfile()
+      if player then
+        local charName = player:getName()
+        if charName and charName:len() > 0 then
+          saveProfile(charName)
+        end
+      end
+    end
+
+    -- Botoes
+    PerfisWindow.controls.saveBtn.onClick = function()
+      if player then
+        local charName = player:getName()
+        if charName and charName:len() > 0 then
+          saveProfile(charName)
+          PerfisWindow.statusLabel:setText("Perfil '" .. charName .. "' salvo!")
+          PerfisWindow.statusLabel:setColor("#00FF88")
+          refreshProfileList()
+          updateCharInfo()
+        end
+      else
+        PerfisWindow.statusLabel:setText("Nenhum personagem logado")
+        PerfisWindow.statusLabel:setColor("red")
+      end
+    end
+
+    PerfisWindow.controls.loadBtn.onClick = function()
+      if selectedProfile then
+        if loadProfile(selectedProfile) then
+          PerfisWindow.statusLabel:setText("Perfil '" .. selectedProfile .. "' carregado!")
+          PerfisWindow.statusLabel:setColor("#00FF88")
+        else
+          PerfisWindow.statusLabel:setText("Erro ao carregar perfil")
+          PerfisWindow.statusLabel:setColor("red")
+        end
+        refreshProfileList()
+        updateCharInfo()
+      else
+        PerfisWindow.statusLabel:setText("Selecione um perfil")
+        PerfisWindow.statusLabel:setColor("yellow")
+      end
+    end
+
+    PerfisWindow.controls.deleteBtn.onClick = function()
+      if selectedProfile then
+        deleteProfile(selectedProfile)
+        PerfisWindow.statusLabel:setText("Perfil '" .. selectedProfile .. "' deletado!")
+        PerfisWindow.statusLabel:setColor("#FF4444")
+        refreshProfileList()
+      else
+        PerfisWindow.statusLabel:setText("Selecione um perfil")
+        PerfisWindow.statusLabel:setColor("yellow")
+      end
+    end
+
+    PerfisWindow.controls.refreshBtn.onClick = function()
+      refreshProfileList()
+      updateCharInfo()
+      PerfisWindow.statusLabel:setText("Lista atualizada")
+      PerfisWindow.statusLabel:setColor("yellow")
+    end
+
+    PerfisWindow.closeButton.onClick = function()
+      PerfisWindow:hide()
+    end
+
+    perfisUI.editPerfis.onClick = function()
+      updateCharInfo()
+      refreshProfileList()
+      PerfisWindow:show()
+      PerfisWindow:raise()
+      PerfisWindow:focus()
+    end
+
+    -- Auto-save periodico a cada 60 segundos
+    macro(60000, "Perfil Auto-Save", function()
+      autoSaveCurrentProfile()
+    end)
+
+    -- Auto-detectar e carregar perfil ao iniciar
+    schedule(1000, function()
+      if player then
+        local charName = player:getName()
+        if charName and charName:len() > 0 then
+          local fileName = PERFIS_DIR .. sanitizeName(charName) .. ".json"
+          if g_resources.fileExists(fileName) then
+            -- Perfil existe, carregar automaticamente
+            loadProfile(charName)
+          else
+            -- Novo personagem, salvar perfil inicial
+            saveProfile(charName)
+          end
+        end
+      end
+    end)
+  end
+end
 
 UI.Separator()
 

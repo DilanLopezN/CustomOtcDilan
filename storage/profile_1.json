@@ -1,203 +1,19 @@
 {
-  "bijuuTimer": {
-    "buff": 227066617,
-    "cd": 227216617
-  },
   "caveBotTasker": {
     "max": 0,
-    "inProgress": false,
-    "count": 0,
     "taskName": "",
-    "monster": ""
+    "inProgress": false,
+    "monster": "",
+    "count": 0
   },
-  "playerList": {
-    "blackList": [
-
-    ],
-    "highlight": false,
-    "groupMembers": true,
-    "outfits": false,
-    "enemyList": [
-
-    ],
-    "friendList": [
-
-    ],
-    "marks": false
-  },
-  "specialDeposit": {
-    "height": 380,
-    "items": [
-
-    ]
-  },
-  "renameContainers": {
-    "list": [
-      {
-        "min": false,
-        "items": [
-          3081,
-          3048
-        ],
-        "enabled": true,
-        "value": "Main Backpack",
-        "item": 9601
-      },
-      {
-        "min": true,
-        "items": [
-          3161,
-          3180
-        ],
-        "enabled": true,
-        "value": "Runes",
-        "item": 2866
-      },
-      {
-        "min": true,
-        "items": [
-          3031,
-          3035,
-          3043
-        ],
-        "enabled": true,
-        "value": "Money",
-        "item": 2871
-      },
-      {
-        "min": true,
-        "items": [
-
-        ],
-        "enabled": true,
-        "value": "Purse",
-        "item": 23396
-      }
-    ],
-    "purse": true,
-    "height": 170,
-    "enabled": false
-  },
-  "fugaIgnoreHp": 0,
-  "bijuuOutfitId": "158",
-  "fugasEnabled": false,
-  "ingame_hotkeys": "\n\n   \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nlocal caveAntesKamui\nlocal emKamui = false\nlocal tempoLiberado = 0\n\nlocal TILE_KAMUI = 13870\n\n\nonTextMessage(function(mode, text)\n\n  if emKamui then return end\n\n  if text:lower():find(\"voce esta no mundo do kamui\") then\n\n    caveAntesKamui =\n      storage._configs.cavebot_configs.selected\n\n    CaveBot.setOff()\n    storage._configs.cavebot_configs.selected = \"saida_kamui\"\n    CaveBot.setOn()\n\n    emKamui = true\n    tempoLiberado = now + 42000\n  end\n\nend)\n\n\nmacro(300, function()\n\n  if not emKamui then return end\n  if now < tempoLiberado then return end\n\n  local player = g_game.getLocalPlayer()\n  if not player then return end\n\n  local tile = g_map.getTile(player:getPosition())\n  if not tile then return end\n\n  local ground = tile:getGround()\n  if not ground then return end\n\n\n  if ground:getId() ~= TILE_KAMUI then\n\n    if caveAntesKamui then\n\n      CaveBot.setOff()\n      storage._configs.cavebot_configs.selected = caveAntesKamui\n      CaveBot.setOn()\n\n    end\n\n    emKamui = false\n  end\n\nend)\n\nlocal castBelowHp = 35\nmacro(100, \"Bijuu\",  function()\n  if (hppercent() <= castBelowHp) then\n    say('mode bijuu')\n  end\nend) \n\n-- Label\nlabelcc = UI.Label(\"Filtro Battle\")\nlabelcc:setFont(\"verdana-11px-rounded\")\nlabelcc:setColor(\"orange\")\n\n-- UI do Filtro\nFiltroIcon = setupUI([[\nPanel\n  height: 20\n  margin-top: 3\n  \n  Panel\n    id: inicio\n    anchors.top: parent.top\n    anchors.left: parent.left\n    margin-left: 0\n    width: 200\n    height: 20\n    font: verdana-11px-rounded\n    opacity: 0.80\n\n  BattlePlayers\n    id: players\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: parent.left\n    margin-left: 27\n    image-source: /images/game/battle/battle_players\n    !tooltip: tr('Filtrar players.')\n\n  BattleNPCs\n    id: npcs\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: prev.left\n    margin-left: 30\n    image-source: /images/game/battle/battle_npcs\n    !tooltip: tr('Filtrar Npcs.')\n\n  BattleMonsters\n    id: mobs\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: prev.left\n    margin-left: 30\n    image-source: /images/game/battle/battle_monsters\n    !tooltip: tr('Filtrar mobs.')\n\n  BattleSkulls\n    id: sempk\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: prev.left\n    margin-left: 30\n    image-source: /images/game/battle/battle_skulls\n    !tooltip: tr('Filtrar Player sem PK.')\n\n  BattleParty\n    id: party\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: prev.left\n    margin-left: 30\n    image-source: /images/game/battle/battle_party\n    !tooltip: tr('Filtrar Membros do Grupo.')\n]], panel)\n\n-- Storage\nstorage.FiltroPlayers = storage.FiltroPlayers or false\nstorage.FiltroNpcs = storage.FiltroNpcs or false\nstorage.FiltroMobs = storage.FiltroMobs or false\nstorage.FiltroSkull = storage.FiltroSkull or false\nstorage.FiltroParty = storage.FiltroParty or false\n\n-- Atualização visual dos ícones\nmacro(100, function()\n  FiltroIcon.players:setImageColor(storage.FiltroPlayers and '#696969' or '#FFFFFF')\n  FiltroIcon.npcs:setImageColor(storage.FiltroNpcs and '#696969' or '#FFFFFF')\n  FiltroIcon.mobs:setImageColor(storage.FiltroMobs and '#696969' or '#FFFFFF')\n  FiltroIcon.sempk:setImageColor(storage.FiltroSkull and '#696969' or '#FFFFFF')\n  FiltroIcon.party:setImageColor(storage.FiltroParty and '#696969' or '#FFFFFF')\nend)\n\n-- Clicks\nFiltroIcon.players.onClick = function() storage.FiltroPlayers = not storage.FiltroPlayers end\nFiltroIcon.npcs.onClick = function() storage.FiltroNpcs = not storage.FiltroNpcs end\nFiltroIcon.mobs.onClick = function() storage.FiltroMobs = not storage.FiltroMobs end\nFiltroIcon.sempk.onClick = function() storage.FiltroSkull = not storage.FiltroSkull end\nFiltroIcon.party.onClick = function() storage.FiltroParty = not storage.FiltroParty end\n\n-- Macro de controle\nFiltrarBattle = macro(1, function() end)\n\n-- Override do filtro da battle\nmodules.game_battle.doCreatureFitFilters = function(creature)\n  if creature:isLocalPlayer() or creature:getHealthPercent() <= 0 then\n    return false\n  end\n  local pos = creature:getPosition()\n  if not pos or pos.z ~= posz() or not creature:canBeSeen() then return false end\n\n  if creature:isMonster() and FiltrarBattle.isOn() and storage.FiltroMobs then\n    return false\n  elseif creature:isPlayer() and FiltrarBattle.isOn() and storage.FiltroPlayers then\n    return false\n  elseif creature:isNpc() and FiltrarBattle.isOn() and storage.FiltroNpcs then\n    return false\n  elseif creature:isPlayer() and (creature:getEmblem() == 1 or creature:getShield() == 3 or creature:getShield() == 4) and FiltrarBattle.isOn() and storage.FiltroParty then\n    return false\n  elseif creature:isPlayer() and creature:getSkull() == 0 and storage.FiltroSkull then\n    return false\n  end\n  return true\nend\n\n\n\nmodules.game_bot.botWindow.contentsPanel:setImageSource(\"/bot/CustomDilanMadara/img/-ezgif.com-gif-to-apng-converter.png\")",
-  "esp_fugas_list": [
-    {
-      "activeTime": 3,
-      "cooldown": 35,
-      "order": 2,
-      "text": "kawarimi no jutsu",
-      "hp": 75
-    },
-    {
-      "activeTime": 3,
-      "cooldown": 35,
-      "order": 1,
-      "text": "katon haijingakure no jutsu",
-      "hp": 60
-    }
-  ],
-  "esp_fugas_widgets_show": [
-    false,
-    false
-  ],
-  "Sense": "Wyz",
-  "FiltroMobs": false,
-  "fugaSpells": [
-    {
-      "cd": 35,
-      "enabled": true,
-      "name": "",
-      "hp": 85,
-      "spell": "kawarimi no jutsu",
-      "duration": 5
-    },
-    {
-      "cd": 45,
-      "enabled": true,
-      "name": "",
-      "hp": 70,
-      "spell": "Katon Haijingakure no Jutsu",
-      "duration": 5
-    },
-    {
-      "cd": 80,
-      "enabled": true,
-      "name": "",
-      "hp": 60,
-      "spell": "Mangekyou Susanoo",
-      "duration": 40
-    },
-    {
-      "cd": 120,
-      "enabled": true,
-      "name": "",
-      "hp": 35,
-      "spell": "mode bijuu",
-      "duration": 35
-    },
-    {
-      "cd": 60,
-      "multiUse": 1,
-      "multiDelay": 2,
-      "enabled": true,
-      "name": "",
-      "spell": "izanagi",
-      "hp": 20,
-      "duration": 10
-    }
-  ],
-  "esp_fuga_2": {
+  "perfis_current": "Barry Vrau",
+  "esp_fuga_4": {
     "activeTime": "3000",
-    "text": "fuga 2",
+    "cooldown": "10000",
     "on": false,
-    "order": "2",
-    "hp": "70",
-    "cooldown": "10000"
-  },
-  "pushmax": {
-    "pushMaxKey": "PageUp",
-    "pushMaxRuneId": 3188,
-    "enabled": false,
-    "mwallBlockId": 2128,
-    "pushDelay": 1060
-  },
-  "musicPlayer": {
-    "volume": 100,
-    "isPlaying": false
-  },
-  "autoDefesaSpell": "mokuton jukai",
-  "buffSpells": [
-    {
-      "spell": "susanoo",
-      "enabled": true
-    },
-    {
-      "spell": "kekkei genkai",
-      "enabled": true
-    }
-  ],
-  "atkWidgetPos": {
-    "y": -4,
-    "x": 434
-  },
-  "bestHit": 0,
-  "FollowPlayerName": "Barry Vrau",
-  "caveBot": {
-    "forceRefill": false,
-    "backTrainers": false,
-    "backStop": false,
-    "backOffline": false
-  },
-  "EquipperPanel": {
-    "rules": [
-
-    ],
-    "bosses": [
-
-    ],
-    "enabled": false
+    "order": "4",
+    "hp": "90",
+    "text": "fuga 4"
   },
   "foodItems": [
     {
@@ -233,17 +49,595 @@
       "id": 3725
     }
   ],
-  "buffWidgetPos": {
-    "y": -2,
-    "x": 892
+  "fugasEnabled": false,
+  "bestHit": 0,
+  "bgPlayer": {
+    "currentBG": "hashirama.png"
   },
-  "hpPotion2": {
-    "enabled": false,
-    "min": 0,
-    "max": 40,
-    "item": 266
+  "esp_fuga_3": {
+    "activeTime": "3000",
+    "cooldown": "10000",
+    "on": false,
+    "order": "3",
+    "hp": "80",
+    "text": "fuga 3"
+  },
+  "alarms": {
+    "creatureDetected": {
+      "enabled": false
+    },
+    "playerDetected": {
+      "enabled": false
+    },
+    "flashClient": [
+
+    ],
+    "lowHealth": {
+      "value": 60,
+      "enabled": true
+    },
+    "customMessage": {
+      "value": ""
+    },
+    "damageTaken": [
+
+    ],
+    "privateMsg": [
+
+    ],
+    "defaultMsg": [
+
+    ],
+    "playerAttack": {
+      "enabled": true
+    },
+    "ignoreFriends": [
+
+    ],
+    "creatureName": {
+      "value": ""
+    },
+    "lowMana": {
+      "value": 20
+    },
+    "enabled": false
+  },
+  "esp_auto_kai": {
+    "spell": "utani hur",
+    "enabled": false
+  },
+  "Sense": "Wyz",
+  "perfis_data": [
+    "Barry Vrau",
+    "Muugan"
+  ],
+  "caveBot": {
+    "backStop": false,
+    "backTrainers": false,
+    "forceRefill": false,
+    "backOffline": false
+  },
+  "pushmax": {
+    "pushDelay": 1060,
+    "mwallBlockId": 2128,
+    "pushMaxRuneId": 3188,
+    "pushMaxKey": "PageUp",
+    "enabled": false
+  },
+  "FiltroPlayers": false,
+  "especiais_panel": [
+
+  ],
+  "atkWidgetPos": {
+    "y": -4,
+    "x": 434
+  },
+  "moneyItems": [
+    {
+      "count": 1,
+      "id": 3031
+    },
+    {
+      "count": 1,
+      "id": 3035
+    }
+  ],
+  "esp_fugas_widgets_show": [
+    true
+  ],
+  "autoDefesaSpell": "mokuton jukai",
+  "bijuuTimer": {
+    "buff": 227066617,
+    "cd": 227216617
+  },
+  "_configs": {
+    "cavebot_configs": {
+      "selected": "Iranki",
+      "enabled": false
+    },
+    "targetbot_configs": {
+      "selected": "todos",
+      "enabled": true
+    }
   },
   "BotServerChannel": "6253964592721",
+  "dropper": {
+    "capItems": [
+      {
+        "count": 1,
+        "id": 21175
+      }
+    ],
+    "trashItems": [
+      {
+        "count": 1,
+        "id": 283
+      },
+      {
+        "count": 1,
+        "id": 284
+      },
+      {
+        "count": 1,
+        "id": 285
+      }
+    ],
+    "useItems": [
+      {
+        "count": 1,
+        "id": 21203
+      },
+      {
+        "count": 1,
+        "id": 14758
+      }
+    ],
+    "enabled": false
+  },
+  "widgetPos": {
+    "pkTimeWidget": {
+      "y": 27,
+      "x": 293
+    },
+    "bijuuHud": {
+      "y": 122,
+      "x": 724
+    }
+  },
+  "followAttackNick": "Barry Vrau",
+  "esp_fuga_1": {
+    "activeTime": "3000",
+    "cooldown": "10000",
+    "on": false,
+    "order": "1",
+    "hp": "60",
+    "text": "fuga 1"
+  },
+  "hpPotion2": {
+    "max": 39,
+    "item": 266,
+    "enabled": false,
+    "min": 0
+  },
+  "EquipperPanel": {
+    "enabled": false,
+    "rules": [
+
+    ],
+    "bosses": [
+
+    ]
+  },
+  "FiltroMobs": false,
+  "_macros": {
+    "": false,
+    "BIjuu": true,
+    "Auto Defesa 5secs": false,
+    "Fuga 4 ON/OFF": false,
+    "Fugas Especiais": true,
+    "Eat Food": true,
+    "Follow": false,
+    "Follow Player": false,
+    "xSense": false,
+    "Sense": false,
+    "Follow Attack": false,
+    "Ataque HP%": false,
+    "Pot Heal 90": false,
+    "Auto Mokuton (Defensivo)": false,
+    "Mokuton Jukai Defesa": false,
+    "virar target": true,
+    "Auto Buff": true,
+    "Bijuu Macro": true,
+    "Fugas Auto": false,
+    "Chase Attack": false,
+    "Auto-Pill": true,
+    "Pot Heal 75": false,
+    "PotMana Perfect 30": false,
+    "BugMap": true,
+    "Combo Madara": false,
+    "Regeneration": false,
+    "Sense Target": false,
+    "PotMana 30": false,
+    "Auto Jump": true,
+    "Cast Food": false,
+    "Dash Kunai": false,
+    "Auto Follow": false,
+    "Turn by target": false,
+    "Bijuu": true,
+    "Fuga 3 ON/OFF": false,
+    "Fuga 1 ON/OFF": false,
+    "Follow PadrÃ£o": false,
+    "Perfil Auto-Save": true,
+    "Kunai": false,
+    "Powerdown": false,
+    "Combo Hashirama": false,
+    "Hold Target [ESC]": true,
+    "Summon Hanma": false,
+    "Traps": true,
+    "Dance": false,
+    "Treinamento": false,
+    "Combo Especial": true,
+    "Auto Summon": true,
+    "Pot Heal 50": false,
+    "Chakra Feet": true,
+    "Pot Perfect 60": false,
+    "Auto KAI": true,
+    "Fuga 2 ON/OFF": false
+  },
+  "newHealer": {
+    "vocations": [
+
+    ],
+    "groups": [
+
+    ],
+    "conditions": {
+      "guild": false,
+      "sorcerers": false,
+      "knights": true,
+      "paladins": true,
+      "friends": false,
+      "botserver": false,
+      "druids": false,
+      "party": true
+    },
+    "priorities": [
+      {
+        "custom": true,
+        "name": "Custom Spell",
+        "enabled": false
+      },
+      {
+        "strong": true,
+        "name": "Exura Gran Sio",
+        "enabled": true
+      },
+      {
+        "normal": true,
+        "name": "Exura Sio",
+        "enabled": true
+      },
+      {
+        "area": true,
+        "name": "Exura Gran Mas Res",
+        "enabled": true
+      },
+      {
+        "health": true,
+        "name": "Health Item",
+        "enabled": true
+      },
+      {
+        "mana": true,
+        "name": "Mana Item",
+        "enabled": true
+      }
+    ],
+    "enabled": false,
+    "customPlayers": [
+
+    ],
+    "settings": [
+      {
+        "type": "HealItem",
+        "value": 268,
+        "text": "Mana Item "
+      },
+      {
+        "type": "HealScroll",
+        "value": 6,
+        "text": "Item Range: "
+      },
+      {
+        "type": "HealItem",
+        "value": 3160,
+        "text": "Health Item "
+      },
+      {
+        "type": "HealScroll",
+        "value": 2,
+        "text": "Mas Res Players: "
+      },
+      {
+        "type": "HealScroll",
+        "value": 80,
+        "text": "Heal Friend at: "
+      },
+      {
+        "type": "HealScroll",
+        "value": 80,
+        "text": "Use Gran Sio at: "
+      },
+      {
+        "type": "HealScroll",
+        "value": 80,
+        "text": "Min Player HP%: "
+      },
+      {
+        "type": "HealScroll",
+        "value": 50,
+        "text": "Min Player MP%: "
+      }
+    ]
+  },
+  "battleTracking": [
+    0,
+    268436638,
+    [
+
+    ]
+  ],
+  "_icons": {
+    "autoJumpIcon": {
+      "y": 0.05,
+      "x": 0.01,
+      "enabled": true
+    },
+    "bugmapIcon": {
+      "y": 0.06570841889117,
+      "x": 0.04490022172949,
+      "enabled": true
+    },
+    "60": {
+      "y": 0.65,
+      "x": 0.01,
+      "enabled": false
+    },
+    "followAttackMacro": {
+      "y": 0.06776180698152,
+      "x": 0.25388026607539,
+      "enabled": false
+    },
+    "followAtk": {
+      "y": 0.11498973305955,
+      "x": 0.15465631929047,
+      "enabled": false
+    },
+    "75": {
+      "y": 0.25,
+      "x": 0.01,
+      "enabled": false
+    },
+    "tI": {
+      "y": 0.074446680080483,
+      "x": 0.080931263858093
+    },
+    "50": {
+      "y": 0.05,
+      "x": 0.01,
+      "enabled": false
+    },
+    "90": {
+      "y": 0.45,
+      "x": 0.01,
+      "enabled": false
+    },
+    "chaseAttack": {
+      "y": 0.074446680080483,
+      "x": 0.21784922394678
+    },
+    "autopill": {
+      "y": 0.06570841889117,
+      "x": 0.15521064301552,
+      "enabled": true
+    },
+    "cI": {
+      "y": 0.076458752515091,
+      "x": 0.11973392461197
+    },
+    "30": {
+      "y": 0.85,
+      "x": 0.01,
+      "enabled": false
+    },
+    "chaseAtk": {
+      "y": 0.068788501026694,
+      "x": 0.21341463414634,
+      "enabled": false
+    }
+  },
+  "BOTserver": {
+    "manaInfo": true,
+    "broadcasts": true,
+    "outfit": false,
+    "vocation": true,
+    "mwallInfo": true,
+    "mwalls": [
+
+    ]
+  },
+  "combobot": {
+    "shootLeader": "",
+    "serverEnabled": false,
+    "commandsEnabled": true,
+    "sayPhrase": "",
+    "serverLeader": "",
+    "attackItemToggle": false,
+    "enabled": false,
+    "onShootEnabled": false,
+    "sayLeader": "",
+    "followLeaderEnabled": false,
+    "attack": "",
+    "follow": "",
+    "spell": "",
+    "item": 3155,
+    "castLeader": "",
+    "onCastEnabled": false,
+    "serverTriggers": true,
+    "onSayEnabled": false,
+    "attackLeaderTargetEnabled": false,
+    "attackSpellEnabled": false,
+    "serverLeaderTarget": false
+  },
+  "bestHeal": 0,
+  "checkVersion": 1772679067,
+  "bijuuOutfitId": "158",
+  "ingame_hotkeys": "\n\n   \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nlocal caveAntesKamui\nlocal emKamui = false\nlocal tempoLiberado = 0\n\nlocal TILE_KAMUI = 13870\n\n\nonTextMessage(function(mode, text)\n\n  if emKamui then return end\n\n  if text:lower():find(\"voce esta no mundo do kamui\") then\n\n    caveAntesKamui =\n      storage._configs.cavebot_configs.selected\n\n    CaveBot.setOff()\n    storage._configs.cavebot_configs.selected = \"saida_kamui\"\n    CaveBot.setOn()\n\n    emKamui = true\n    tempoLiberado = now + 42000\n  end\n\nend)\n\n\nmacro(300, function()\n\n  if not emKamui then return end\n  if now < tempoLiberado then return end\n\n  local player = g_game.getLocalPlayer()\n  if not player then return end\n\n  local tile = g_map.getTile(player:getPosition())\n  if not tile then return end\n\n  local ground = tile:getGround()\n  if not ground then return end\n\n\n  if ground:getId() ~= TILE_KAMUI then\n\n    if caveAntesKamui then\n\n      CaveBot.setOff()\n      storage._configs.cavebot_configs.selected = caveAntesKamui\n      CaveBot.setOn()\n\n    end\n\n    emKamui = false\n  end\n\nend)\n\n-- Label\nlabelcc = UI.Label(\"Filtro Battle\")\nlabelcc:setFont(\"verdana-11px-rounded\")\nlabelcc:setColor(\"orange\")\n\n-- UI do Filtro\nFiltroIcon = setupUI([[\nPanel\n  height: 20\n  margin-top: 3\n  \n  Panel\n    id: inicio\n    anchors.top: parent.top\n    anchors.left: parent.left\n    margin-left: 0\n    width: 200\n    height: 20\n    font: verdana-11px-rounded\n    opacity: 0.80\n\n  BattlePlayers\n    id: players\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: parent.left\n    margin-left: 27\n    image-source: /images/game/battle/battle_players\n    !tooltip: tr('Filtrar players.')\n\n  BattleNPCs\n    id: npcs\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: prev.left\n    margin-left: 30\n    image-source: /images/game/battle/battle_npcs\n    !tooltip: tr('Filtrar Npcs.')\n\n  BattleMonsters\n    id: mobs\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: prev.left\n    margin-left: 30\n    image-source: /images/game/battle/battle_monsters\n    !tooltip: tr('Filtrar mobs.')\n\n  BattleSkulls\n    id: sempk\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: prev.left\n    margin-left: 30\n    image-source: /images/game/battle/battle_skulls\n    !tooltip: tr('Filtrar Player sem PK.')\n\n  BattleParty\n    id: party\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: prev.left\n    margin-left: 30\n    image-source: /images/game/battle/battle_party\n    !tooltip: tr('Filtrar Membros do Grupo.')\n]], panel)\n\n-- Storage\nstorage.FiltroPlayers = storage.FiltroPlayers or false\nstorage.FiltroNpcs = storage.FiltroNpcs or false\nstorage.FiltroMobs = storage.FiltroMobs or false\nstorage.FiltroSkull = storage.FiltroSkull or false\nstorage.FiltroParty = storage.FiltroParty or false\n\n-- Atualização visual dos ícones\nmacro(100, function()\n  FiltroIcon.players:setImageColor(storage.FiltroPlayers and '#696969' or '#FFFFFF')\n  FiltroIcon.npcs:setImageColor(storage.FiltroNpcs and '#696969' or '#FFFFFF')\n  FiltroIcon.mobs:setImageColor(storage.FiltroMobs and '#696969' or '#FFFFFF')\n  FiltroIcon.sempk:setImageColor(storage.FiltroSkull and '#696969' or '#FFFFFF')\n  FiltroIcon.party:setImageColor(storage.FiltroParty and '#696969' or '#FFFFFF')\nend)\n\n-- Clicks\nFiltroIcon.players.onClick = function() storage.FiltroPlayers = not storage.FiltroPlayers end\nFiltroIcon.npcs.onClick = function() storage.FiltroNpcs = not storage.FiltroNpcs end\nFiltroIcon.mobs.onClick = function() storage.FiltroMobs = not storage.FiltroMobs end\nFiltroIcon.sempk.onClick = function() storage.FiltroSkull = not storage.FiltroSkull end\nFiltroIcon.party.onClick = function() storage.FiltroParty = not storage.FiltroParty end\n\n-- Macro de controle\nFiltrarBattle = macro(1, function() end)\n\n-- Override do filtro da battle\nmodules.game_battle.doCreatureFitFilters = function(creature)\n  if creature:isLocalPlayer() or creature:getHealthPercent() <= 0 then\n    return false\n  end\n  local pos = creature:getPosition()\n  if not pos or pos.z ~= posz() or not creature:canBeSeen() then return false end\n\n  if creature:isMonster() and FiltrarBattle.isOn() and storage.FiltroMobs then\n    return false\n  elseif creature:isPlayer() and FiltrarBattle.isOn() and storage.FiltroPlayers then\n    return false\n  elseif creature:isNpc() and FiltrarBattle.isOn() and storage.FiltroNpcs then\n    return false\n  elseif creature:isPlayer() and (creature:getEmblem() == 1 or creature:getShield() == 3 or creature:getShield() == 4) and FiltrarBattle.isOn() and storage.FiltroParty then\n    return false\n  elseif creature:isPlayer() and creature:getSkull() == 0 and storage.FiltroSkull then\n    return false\n  end\n  return true\nend\n\n\n\n",
+  "fugaSpells": [
+    {
+      "cd": 35,
+      "duration": 5,
+      "hp": 85,
+      "name": "",
+      "spell": "kawarimi no jutsu",
+      "enabled": true
+    },
+    {
+      "cd": 45,
+      "duration": 5,
+      "hp": 70,
+      "name": "",
+      "spell": "Katon Haijingakure no Jutsu",
+      "enabled": true
+    },
+    {
+      "cd": 80,
+      "duration": 40,
+      "hp": 60,
+      "name": "",
+      "spell": "Mangekyou Susanoo",
+      "enabled": true
+    },
+    {
+      "cd": 120,
+      "duration": 35,
+      "hp": 35,
+      "name": "",
+      "spell": "mode bijuu",
+      "enabled": true
+    },
+    {
+      "cd": 60,
+      "enabled": true,
+      "duration": 10,
+      "hp": 20,
+      "name": "",
+      "spell": "izanagi",
+      "multiUse": 1,
+      "multiDelay": 2
+    }
+  ],
+  "listt": [
+
+  ],
+  "esp_fugas_list": [
+    {
+      "uid": 0,
+      "activeTime": 3,
+      "cooldown": 35,
+      "hp": 75,
+      "order": 2,
+      "text": "kawarimi no jutsu"
+    },
+    {
+      "uid": 1,
+      "activeTime": 3,
+      "cooldown": 35,
+      "hp": 60,
+      "order": 1,
+      "text": "sennin modo"
+    }
+  ],
+  "autoEquip": [
+    {
+      "on": false,
+      "slot": 9,
+      "title": "Auto Equip",
+      "item1": 3052,
+      "item2": 3089
+    },
+    {
+      "on": false,
+      "slot": 0,
+      "title": "Auto Equip",
+      "item1": 0,
+      "item2": 0
+    }
+  ],
+  "musicPlayer": {
+    "isPlaying": false,
+    "currentTrack": "lovers.ogg",
+    "volume": 100
+  },
+  "manaPotion1": {
+    "max": 54,
+    "item": 268,
+    "enabled": false,
+    "min": 0
+  },
+  "hpPotion1": {
+    "max": 67,
+    "item": 268,
+    "enabled": false,
+    "min": 0
+  },
+  "esp_trap": {
+    "text2": "",
+    "text4": "",
+    "text6": "",
+    "text1": "",
+    "text3": "",
+    "text5": ""
+  },
+  "FiltroSkull": false,
+  "cavebotSell": [
+    {
+      "count": 1,
+      "id": 23544
+    },
+    {
+      "count": 1,
+      "id": 3081
+    }
+  ],
+  "specialDeposit": {
+    "height": 380,
+    "items": [
+
+    ]
+  },
+  "esp_combo_list": [
+    {
+      "text": "magia 1"
+    }
+  ],
+  "fugaIgnoreHp": 0,
+  "manaPotion2": {
+    "max": 40,
+    "item": 268,
+    "enabled": false,
+    "min": 0
+  },
+  "autoMokuton": {
+    "spell": "mokuton jukai",
+    "enabled": false
+  },
+  "esp_fugas_widgets_pos": [
+    {
+      "y": 515,
+      "x": 1072
+    }
+  ],
   "atkSpells": [
     {
       "cd": 1,
@@ -271,1293 +665,1019 @@
       "hp": 50
     }
   ],
-  "checkVersion": 1771010246,
-  "FiltroSkull": false,
-  "moneyItems": [
-    {
-      "count": 1,
-      "id": 3031
-    },
-    {
-      "count": 1,
-      "id": 3035
-    }
-  ],
-  "bgPlayer": {
-    "currentBG": "madara.png"
-  },
-  "dropper": {
-    "capItems": [
-      {
-        "count": 1,
-        "id": 21175
-      }
-    ],
-    "useItems": [
-      {
-        "count": 1,
-        "id": 21203
-      },
-      {
-        "count": 1,
-        "id": 14758
-      }
-    ],
-    "trashItems": [
-      {
-        "count": 1,
-        "id": 283
-      },
-      {
-        "count": 1,
-        "id": 284
-      },
-      {
-        "count": 1,
-        "id": 285
-      }
-    ],
-    "enabled": false
-  },
-  "extras": {
-    "pathfinding": true,
-    "reachable": false,
-    "joinBot": false,
-    "looting": 40,
-    "highlightTarget": true,
-    "machete": 9596,
-    "rope": 9596,
-    "holdWgHot": "F6",
-    "reUse": false,
-    "oberon": true,
-    "shovel": 9596,
-    "killUnder": 1,
-    "lootLast": true,
-    "gotoMaxDistance": 30,
-    "timers": true,
-    "suppliesControl": false,
-    "huntRoutes": 50,
-    "bless": true,
-    "title": true,
-    "stake": false,
-    "scythe": 9596,
-    "separatePm": false,
-    "talkDelay": 1000,
-    "holdMwHot": "F5",
-    "antiKick": true,
-    "nextBackpack": true,
-    "lootDelay": 200,
-    "useAll": "space",
-    "autoOpenDoors": true,
-    "checkPlayer": true,
-    "holdMwall": true
-  },
-  "FiltroParty": false,
-  "newHealer": {
-    "settings": [
-      {
-        "value": 268,
-        "text": "Mana Item ",
-        "type": "HealItem"
-      },
-      {
-        "value": 6,
-        "text": "Item Range: ",
-        "type": "HealScroll"
-      },
-      {
-        "value": 3160,
-        "text": "Health Item ",
-        "type": "HealItem"
-      },
-      {
-        "value": 2,
-        "text": "Mas Res Players: ",
-        "type": "HealScroll"
-      },
-      {
-        "value": 80,
-        "text": "Heal Friend at: ",
-        "type": "HealScroll"
-      },
-      {
-        "value": 80,
-        "text": "Use Gran Sio at: ",
-        "type": "HealScroll"
-      },
-      {
-        "value": 80,
-        "text": "Min Player HP%: ",
-        "type": "HealScroll"
-      },
-      {
-        "value": 50,
-        "text": "Min Player MP%: ",
-        "type": "HealScroll"
-      }
-    ],
-    "customPlayers": [
-
-    ],
-    "groups": [
-
-    ],
-    "enabled": false,
-    "priorities": [
-      {
-        "name": "Custom Spell",
-        "custom": true,
-        "enabled": false
-      },
-      {
-        "name": "Exura Gran Sio",
-        "enabled": true,
-        "strong": true
-      },
-      {
-        "name": "Exura Sio",
-        "normal": true,
-        "enabled": true
-      },
-      {
-        "name": "Exura Gran Mas Res",
-        "enabled": true,
-        "area": true
-      },
-      {
-        "name": "Health Item",
-        "health": true,
-        "enabled": true
-      },
-      {
-        "name": "Mana Item",
-        "mana": true,
-        "enabled": true
-      }
-    ],
-    "vocations": [
-
-    ],
-    "conditions": {
-      "friends": false,
-      "sorcerers": false,
-      "botserver": false,
-      "druids": false,
-      "paladins": true,
-      "guild": false,
-      "party": true,
-      "knights": true
-    }
-  },
-  "esp_fuga_4": {
-    "activeTime": "3000",
-    "text": "fuga 4",
-    "on": false,
-    "order": "4",
-    "hp": "90",
-    "cooldown": "10000"
-  },
-  "Kunai": "7382",
-  "FiltroPlayers": false,
-  "especiais_panel": [
-
-  ],
-  "listt": [
-
-  ],
-  "autoEquip": [
-    {
-      "item1": 3052,
-      "item2": 3089,
-      "title": "Auto Equip",
-      "on": false,
-      "slot": 9
-    },
-    {
-      "item1": 0,
-      "item2": 0,
-      "title": "Auto Equip",
-      "on": false,
-      "slot": 0
-    }
-  ],
-  "esp_fuga_3": {
-    "activeTime": "3000",
-    "text": "fuga 3",
-    "on": false,
-    "order": "3",
-    "hp": "80",
-    "cooldown": "10000"
-  },
-  "esp_combo": {
-    "text1": "magia 1",
-    "text3": "magia 3",
-    "text6": "magia 6",
-    "text4": "magia 4",
-    "text5": "magia 5",
-    "text2": "magia 2"
-  },
-  "BOTserver": {
-    "mwallInfo": true,
-    "mwalls": [
-
-    ],
-    "manaInfo": true,
-    "vocation": true,
-    "outfit": false,
-    "broadcasts": true
-  },
-  "fugaWidgetPos": {
-    "y": -4,
-    "x": 640
-  },
-  "alarms": {
-    "enabled": false,
-    "flashClient": [
-
-    ],
-    "customMessage": {
-      "value": ""
-    },
-    "defaultMsg": [
-
-    ],
-    "ignoreFriends": [
-
-    ],
-    "creatureName": {
-      "value": ""
-    },
-    "lowHealth": {
-      "value": 60,
-      "enabled": true
-    },
-    "damageTaken": [
-
-    ],
-    "privateMsg": [
-
-    ],
-    "playerDetected": {
-      "enabled": false
-    },
-    "lowMana": {
-      "value": 20
-    },
-    "creatureDetected": {
-      "enabled": false
-    },
-    "playerAttack": {
-      "enabled": true
-    }
-  },
-  "battleTracking": [
-    0,
-    268435721,
-    [
-
-    ]
-  ],
   "analyzers": {
     "customPrices": [
 
     ],
     "rarityFrames": true,
-    "lootChannel": true,
     "outfits": {
-      "Fantasma The Killer": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "aura": 0,
-        "type": 30,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Bull": {
+      "Hebi Jya": {
+        "type": 1136,
         "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 235,
         "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Gama Bunta": {
-        "feet": 79,
-        "aura3": 0,
         "body": 94,
         "addons": 0,
-        "type": 55,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
+        "aura3": 0,
+        "aura2": 0,
         "aura": 0,
-        "wings": 0,
         "aura4": 0,
-        "aura2": 0
-      },
-      "Hebi Shiro": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 65,
-        "legs": 79,
-        "auxType": 0,
         "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Katon Goukakyuu": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "aura": 0,
-        "type": 850,
-        "legs": 0,
         "auxType": 0,
-        "head": 0,
-        "addons": 3,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Oukami": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 1138,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Gedou": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 279,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Yurei Sand": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 1135,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Kabutomushi": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 1133,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Drako Asuma": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "aura": 0,
-        "type": 958,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "addons": 3,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Ehrmantraut": {
-        "feet": 8,
-        "aura3": 0,
-        "body": 88,
-        "aura": 1533,
-        "type": 702,
-        "legs": 125,
-        "auxType": 0,
-        "head": 46,
-        "addons": 3,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Orochi Howaito": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 830,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Obliver Nazaki": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "addons": 3,
-        "type": 1546,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "aura": 1474,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Morbid Angel": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "aura": 1480,
-        "type": 1240,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "addons": 3,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Balenciaga": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "aura": 1510,
-        "type": 1460,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "addons": 3,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Galho": {
-        "feet": 114,
-        "aura3": 0,
-        "body": 114,
-        "aura": 1936,
-        "type": 1460,
-        "legs": 114,
-        "auxType": 0,
-        "head": 114,
-        "addons": 3,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Godokawa": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "addons": 0,
-        "type": 1398,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "aura": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Werekan": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "addons": 0,
-        "type": 1194,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "aura": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Bone With Life": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "aura": 1486,
-        "type": 935,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Hanma Mokuton": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 465,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Trainer": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "aura": 0,
-        "type": 148,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Sexy  Girl": {
-        "feet": 40,
-        "aura3": 0,
-        "body": 72,
-        "addons": 3,
-        "type": 173,
-        "legs": 44,
-        "auxType": 0,
-        "head": 112,
-        "aura": 1498,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Evy Stella": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "aura": 1496,
-        "type": 1163,
-        "legs": 110,
-        "auxType": 0,
-        "head": 0,
-        "addons": 3,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Scorpion": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 770,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Wyz": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "addons": 3,
-        "type": 1560,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "aura": 1901,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Vampire": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 483,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Heishi": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 1142,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Ma Sorte": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "addons": 3,
-        "type": 1241,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "aura": 1480,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Spectro": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 264,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Miratsu": {
-        "feet": 22,
-        "aura3": 0,
-        "body": 66,
-        "aura": 0,
-        "type": 1120,
-        "legs": 77,
-        "auxType": 0,
-        "head": 55,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Lmtzk": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "aura": 0,
-        "type": 1957,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "addons": 3,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Gedou Dog": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "addons": 0,
-        "type": 48,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "aura": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Arak": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 507,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Renegade Akatsuki": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "aura": 0,
-        "type": 604,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "addons": 3,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Venom Scorpion": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 870,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Saizo": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 1390,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
+        "wings": 0
       },
       "Lmtzk - [Jouki Booi]": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "aura": 0,
         "type": 2093,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "addons": 3,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Keshin": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 1143,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Ishikawa": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "addons": 0,
-        "type": 1391,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "aura": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Yudoku": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 1140,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Hebi Jya": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 1136,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Ningyoo": {
         "feet": 0,
         "legs": 0,
-        "aura2": 0,
-        "head": 38,
-        "type": 1233,
-        "aura3": 0,
-        "auxType": 0,
-        "aura": 1488,
+        "body": 0,
         "addons": 3,
-        "wings": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
         "aura4": 0,
-        "body": 19
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Oukami": {
+        "type": 1138,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Yurei Sand": {
+        "type": 1135,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
       },
       "Vampire Mutated": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
         "type": 482,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Kentaurea": {
         "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 1144,
         "legs": 79,
-        "auxType": 0,
-        "head": 0,
+        "body": 94,
         "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Froggers": {
-        "feet": 0,
         "aura3": 0,
-        "body": 0,
-        "addons": 3,
-        "type": 428,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "aura": 1512,
-        "wings": 0,
+        "aura2": 0,
+        "aura": 0,
         "aura4": 0,
-        "aura2": 0
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
       },
       "Katsuyu": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
         "type": 115,
+        "feet": 79,
         "legs": 79,
-        "auxType": 0,
-        "head": 0,
+        "body": 94,
         "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Jhon Jhones": {
-        "feet": 6,
         "aura3": 0,
-        "body": 109,
-        "aura": 1497,
-        "type": 1374,
-        "legs": 96,
-        "auxType": 0,
-        "head": 94,
-        "addons": 3,
-        "wings": 0,
+        "aura2": 0,
+        "aura": 0,
         "aura4": 0,
-        "aura2": 0
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
       },
       "Missy": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "aura": 1489,
         "type": 788,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "addons": 3,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Light Shadow": {
         "feet": 0,
-        "aura3": 0,
+        "legs": 0,
         "body": 0,
         "addons": 3,
-        "type": 340,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "aura": 1511,
-        "wings": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 1489,
         "aura4": 0,
-        "aura2": 0
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
       },
       "Kakashi Senpai": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
         "type": 733,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Senchou": {
         "feet": 79,
-        "aura3": 0,
+        "legs": 79,
         "body": 94,
         "addons": 0,
-        "type": 1141,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
+        "aura3": 0,
+        "aura2": 0,
         "aura": 0,
-        "wings": 0,
         "aura4": 0,
-        "aura2": 0
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Hebi Shiro": {
+        "type": 65,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
       },
       "Raiton Bunshin": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "aura": 0,
         "type": 289,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Onryo Madara": {
         "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "aura": 1903,
-        "type": 626,
         "legs": 0,
-        "auxType": 0,
+        "body": 0,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
         "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Light Shadow": {
+        "type": 340,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
         "addons": 3,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Bikkubado": {
-        "feet": 79,
         "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 766,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
+        "aura2": 0,
+        "aura": 1511,
         "aura4": 0,
-        "aura2": 0
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
       },
-      "Araken": {
-        "feet": 79,
+      "Wyz": {
+        "type": 1560,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 3,
         "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 508,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
+        "aura2": 0,
+        "aura": 1901,
         "aura4": 0,
-        "aura2": 0
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Astrooxd": {
+        "type": 107,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Ma Sorte": {
+        "type": 1241,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 1480,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
       },
       "Obliver El Magnata": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "aura": 1480,
         "type": 1242,
+        "feet": 0,
         "legs": 0,
-        "auxType": 0,
-        "head": 0,
+        "body": 0,
         "addons": 3,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 2135
-      },
-      "Aracnideo": {
-        "feet": 79,
         "aura3": 0,
-        "body": 94,
+        "aura2": 2135,
+        "aura": 1480,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Katon Goukakyuu": {
+        "type": 850,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
         "aura": 0,
-        "type": 665,
-        "legs": 79,
-        "auxType": 0,
+        "aura4": 0,
         "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Saasuke Naamizake": {
-        "feet": 87,
-        "aura3": 0,
-        "body": 70,
-        "aura": 1902,
-        "type": 858,
-        "legs": 29,
         "auxType": 0,
-        "head": 96,
+        "wings": 0
+      },
+      "Radius Carnaje": {
+        "type": 2104,
+        "feet": 114,
+        "legs": 114,
+        "body": 114,
         "addons": 3,
-        "wings": 0,
+        "aura3": 0,
+        "auxType": 0,
+        "aura": 2003,
         "aura4": 0,
+        "wings": 0,
+        "head": 114,
         "aura2": 0
       },
       "Ibuki": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "addons": 0,
         "type": 1393,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "aura": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Ningame": {
         "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
-        "type": 1577,
         "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Shinobi Fire": {
-        "feet": 79,
-        "aura3": 0,
         "body": 94,
         "addons": 0,
-        "type": 116,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "aura": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Mamushi": {
-        "feet": 79,
         "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Ishikawa": {
+        "type": 1391,
+        "feet": 79,
+        "legs": 79,
         "body": 94,
         "addons": 0,
-        "type": 758,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "aura": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Venom Snake": {
-        "feet": 79,
         "aura3": 0,
-        "body": 94,
+        "aura2": 0,
         "aura": 0,
-        "type": 150,
-        "legs": 79,
-        "auxType": 0,
-        "head": 0,
-        "addons": 0,
-        "wings": 0,
         "aura4": 0,
-        "aura2": 0
-      },
-      "Zinho": {
-        "feet": 0,
-        "aura3": 0,
-        "body": 0,
-        "aura": 1503,
-        "type": 545,
-        "legs": 0,
-        "auxType": 0,
         "head": 0,
-        "addons": 3,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
+        "auxType": 0,
+        "wings": 0
       },
       "Iranki": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
         "type": 1392,
+        "feet": 79,
         "legs": 79,
-        "auxType": 0,
-        "head": 0,
+        "body": 94,
         "addons": 0,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "No Kami": {
-        "feet": 0,
         "aura3": 0,
-        "body": 0,
+        "aura2": 0,
         "aura": 0,
-        "type": 710,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "addons": 3,
-        "wings": 0,
         "aura4": 0,
-        "aura2": 0
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
       },
-      "All Whatever": {
+      "Zinho": {
+        "type": 545,
         "feet": 0,
-        "aura3": 0,
+        "legs": 0,
         "body": 0,
         "addons": 3,
-        "type": 1729,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "aura": 1481,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Astrooxd": {
-        "feet": 0,
         "aura3": 0,
-        "body": 0,
+        "aura2": 0,
+        "aura": 1503,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Araken": {
+        "type": 508,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
         "aura": 0,
-        "type": 107,
-        "legs": 0,
-        "auxType": 0,
-        "head": 0,
-        "addons": 3,
-        "wings": 0,
         "aura4": 0,
-        "aura2": 0
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Onryo Madara": {
+        "type": 626,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 1903,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
       },
       "Hogosha": {
-        "feet": 79,
-        "aura3": 0,
-        "body": 94,
-        "aura": 0,
         "type": 1139,
+        "feet": 79,
         "legs": 79,
-        "auxType": 0,
-        "head": 0,
+        "body": 94,
         "addons": 0,
-        "wings": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
         "aura4": 0,
-        "aura2": 0
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Saasuke Naamizake": {
+        "type": 858,
+        "feet": 87,
+        "legs": 29,
+        "body": 70,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 1902,
+        "aura4": 0,
+        "head": 96,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Keshin": {
+        "type": 1143,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Bull": {
+        "type": 235,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
       },
       "Ryujin Shun": {
-        "feet": 89,
-        "aura3": 0,
-        "body": 43,
-        "aura": 1918,
         "type": 340,
+        "feet": 89,
         "legs": 95,
-        "auxType": 0,
-        "head": 75,
+        "body": 43,
         "addons": 3,
-        "wings": 0,
-        "aura4": 0,
-        "aura2": 0
-      },
-      "Sword No Kami": {
-        "feet": 0,
         "aura3": 0,
+        "aura2": 0,
+        "aura": 1918,
+        "aura4": 0,
+        "head": 75,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Evy Stella": {
+        "type": 1163,
+        "feet": 0,
+        "legs": 110,
         "body": 0,
         "addons": 3,
-        "type": 624,
-        "legs": 0,
-        "auxType": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 1496,
+        "aura4": 0,
         "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Bikkubado": {
+        "type": 766,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Obliver Nazaki": {
+        "type": 1546,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 1474,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Godokawa": {
+        "type": 1398,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Vampire": {
+        "type": 483,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Gedou Dog": {
+        "type": 48,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Werekan": {
+        "type": 1194,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Orochi Howaito": {
+        "type": 830,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Spectro": {
+        "type": 264,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Venom Scorpion": {
+        "type": 870,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Gama Bunta": {
+        "type": 55,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Miratsu": {
+        "type": 1120,
+        "feet": 22,
+        "legs": 77,
+        "body": 66,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 55,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Aracnideo": {
+        "type": 665,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Fantasma The Killer": {
+        "type": 30,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Sexy  Girl": {
+        "type": 173,
+        "feet": 40,
+        "legs": 44,
+        "body": 72,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 1498,
+        "aura4": 0,
+        "head": 112,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Yudoku": {
+        "type": 1140,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Hanma Mokuton": {
+        "type": 465,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Mamushi": {
+        "type": 758,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Gedou": {
+        "type": 279,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Kabutomushi": {
+        "type": 1133,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Senchou": {
+        "type": 1141,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Ehrmantraut": {
+        "type": 702,
+        "feet": 8,
+        "legs": 125,
+        "body": 88,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 1533,
+        "aura4": 0,
+        "head": 46,
+        "auxType": 0,
+        "wings": 0
+      },
+      "All Whatever": {
+        "type": 1729,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 1481,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Trainer": {
+        "type": 148,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Saizo": {
+        "type": 1390,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Froggers": {
+        "type": 428,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 1512,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Balenciaga": {
+        "type": 1460,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 1510,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Sword No Kami": {
+        "type": 624,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
         "aura": 1920,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Galho": {
+        "type": 1460,
+        "feet": 114,
+        "legs": 114,
+        "body": 114,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 1936,
+        "aura4": 0,
+        "head": 114,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Jhon Jhones": {
+        "type": 1374,
+        "feet": 6,
+        "legs": 96,
+        "body": 109,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 1497,
+        "aura4": 0,
+        "head": 94,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Drako Asuma": {
+        "type": 958,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Ningame": {
+        "type": 1577,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Ningyoo": {
+        "type": 1233,
+        "feet": 0,
+        "legs": 0,
+        "body": 19,
+        "addons": 3,
+        "aura3": 0,
+        "auxType": 0,
         "wings": 0,
         "aura4": 0,
-        "aura2": 0
+        "aura": 1488,
+        "aura2": 0,
+        "head": 38
+      },
+      "Bone With Life": {
+        "type": 935,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 1486,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Kentaurea": {
+        "type": 1144,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Venom Snake": {
+        "type": 150,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Shinobi Fire": {
+        "type": 116,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Lmtzk": {
+        "type": 1957,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "No Kami": {
+        "type": 710,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Heishi": {
+        "type": 1142,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Arak": {
+        "type": 507,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Renegade Akatsuki": {
+        "type": 604,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Morbid Angel": {
+        "type": 1240,
+        "feet": 0,
+        "legs": 0,
+        "body": 0,
+        "addons": 3,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 1480,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
+      },
+      "Scorpion": {
+        "type": 770,
+        "feet": 79,
+        "legs": 79,
+        "body": 94,
+        "addons": 0,
+        "aura3": 0,
+        "aura2": 0,
+        "aura": 0,
+        "aura4": 0,
+        "head": 0,
+        "auxType": 0,
+        "wings": 0
       }
     },
     "trackedLoot": [
@@ -1565,241 +1685,165 @@
     ],
     "trackedBoss": [
 
-    ]
+    ],
+    "lootChannel": true
   },
-  "widgetPos": {
-    "pkTimeWidget": {
-      "y": 27,
-      "x": 293
+  "buffSpells": [
+    {
+      "spell": "susanoo",
+      "enabled": false
     },
-    "bijuuHud": {
-      "y": 122,
-      "x": 724
+    {
+      "spell": "kekkei genkai",
+      "enabled": true
     }
+  ],
+  "Kunai": "7382",
+  "fugaWidgetPos": {
+    "y": -4,
+    "x": 640
   },
-  "autoTradeMessage": "I'm using OTClientV8!",
+  "renameContainers": {
+    "height": 170,
+    "enabled": false,
+    "list": [
+      {
+        "items": [
+          3081,
+          3048
+        ],
+        "value": "Main Backpack",
+        "item": 9601,
+        "enabled": true,
+        "min": false
+      },
+      {
+        "items": [
+          3161,
+          3180
+        ],
+        "value": "Runes",
+        "item": 2866,
+        "enabled": true,
+        "min": true
+      },
+      {
+        "items": [
+          3031,
+          3035,
+          3043
+        ],
+        "value": "Money",
+        "item": 2871,
+        "enabled": true,
+        "min": true
+      },
+      {
+        "items": [
+
+        ],
+        "value": "Purse",
+        "item": 23396,
+        "enabled": true,
+        "min": true
+      }
+    ],
+    "purse": true
+  },
   "FiltroNpcs": false,
-  "manaPotion1": {
-    "enabled": false,
-    "min": 0,
-    "max": 60,
-    "item": 268
-  },
-  "hpPotion1": {
-    "enabled": false,
-    "min": 0,
-    "max": 60,
-    "item": 268
-  },
-  "esp_trap": {
-    "text1": "trap 1",
-    "text3": "trap 3",
-    "text6": "trap 6",
-    "text4": "trap 4",
-    "text5": "trap 5",
-    "text2": "trap 2"
-  },
-  "cavebotSell": [
-    {
-      "count": 1,
-      "id": 23544
-    },
-    {
-      "count": 1,
-      "id": 3081
-    }
-  ],
-  "manaPotion2": {
-    "enabled": false,
-    "min": 0,
-    "max": 40,
-    "item": 268
-  },
-  "esp_fugas_widgets_pos": [
-    {
-      "y": 361,
-      "x": 1092
-    },
-    {
-      "y": 467,
-      "x": 1104
-    }
-  ],
-  "followAttackNick": "Barry Vrau",
   "bijuuConfig": {
-    "outfitId": 301,
+    "healSpell": "Bijuu regeneration",
     "comboSpells": [
 
     ],
-    "healSpell": "Bijuu regeneration"
+    "outfitId": 301
   },
-  "combobot": {
-    "serverLeaderTarget": false,
-    "attackItemToggle": false,
-    "enabled": false,
-    "onShootEnabled": false,
-    "sayLeader": "",
-    "followLeaderEnabled": false,
-    "castLeader": "",
-    "spell": "",
-    "attackSpellEnabled": false,
-    "onCastEnabled": false,
-    "attack": "",
-    "shootLeader": "",
-    "sayPhrase": "",
-    "serverTriggers": true,
-    "onSayEnabled": false,
-    "commandsEnabled": true,
-    "follow": "",
-    "serverEnabled": false,
-    "serverLeader": "",
-    "attackLeaderTargetEnabled": false,
-    "item": 3155
+  "extras": {
+    "stake": false,
+    "gotoMaxDistance": 30,
+    "machete": 9596,
+    "reUse": false,
+    "talkDelay": 1000,
+    "title": true,
+    "shovel": 9596,
+    "killUnder": 1,
+    "timers": true,
+    "oberon": true,
+    "suppliesControl": false,
+    "rope": 9596,
+    "antiKick": true,
+    "huntRoutes": 50,
+    "holdMwall": true,
+    "lootLast": true,
+    "highlightTarget": true,
+    "reachable": false,
+    "lootDelay": 200,
+    "pathfinding": true,
+    "useAll": "space",
+    "joinBot": false,
+    "holdMwHot": "F5",
+    "nextBackpack": true,
+    "holdWgHot": "F6",
+    "checkPlayer": true,
+    "scythe": 9596,
+    "bless": true,
+    "separatePm": false,
+    "looting": 40,
+    "autoOpenDoors": true
   },
-  "bestHeal": 0,
-  "esp_fuga_1": {
+  "buffWidgetPos": {
+    "y": -2,
+    "x": 892
+  },
+  "esp_buffs_list": [
+    {
+      "uid": 0,
+      "activeTime": 10,
+      "cooldown": 30,
+      "text": "buff 1"
+    },
+    {
+      "uid": 1,
+      "activeTime": 10,
+      "cooldown": 30,
+      "text": "buff 2"
+    }
+  ],
+  "esp_fuga_2": {
     "activeTime": "3000",
-    "text": "fuga 1",
+    "cooldown": "10000",
     "on": false,
-    "order": "1",
-    "hp": "60",
-    "cooldown": "10000"
+    "order": "2",
+    "hp": "70",
+    "text": "fuga 2"
   },
-  "_icons": {
-    "followAtk": {
-      "y": 0.11498973305955,
-      "x": 0.15465631929047,
-      "enabled": false
-    },
-    "30": {
-      "y": 0.85,
-      "x": 0.01,
-      "enabled": false
-    },
-    "followAttackMacro": {
-      "y": 0.06776180698152,
-      "x": 0.25388026607539,
-      "enabled": false
-    },
-    "90": {
-      "y": 0.45,
-      "x": 0.01,
-      "enabled": false
-    },
-    "autopill": {
-      "y": 0.06570841889117,
-      "x": 0.15521064301552,
-      "enabled": true
-    },
-    "tI": {
-      "y": 0.074446680080483,
-      "x": 0.080931263858093
-    },
-    "75": {
-      "y": 0.25,
-      "x": 0.01,
-      "enabled": true
-    },
-    "cI": {
-      "y": 0.076458752515091,
-      "x": 0.11973392461197
-    },
-    "chaseAtk": {
-      "y": 0.068788501026694,
-      "x": 0.21341463414634,
-      "enabled": false
-    },
-    "60": {
-      "y": 0.65,
-      "x": 0.01,
-      "enabled": false
-    },
-    "50": {
-      "y": 0.05,
-      "x": 0.01,
-      "enabled": false
-    },
-    "chaseAttack": {
-      "y": 0.074446680080483,
-      "x": 0.21784922394678
-    },
-    "bugmapIcon": {
-      "y": 0.06570841889117,
-      "x": 0.04490022172949,
-      "enabled": true
-    },
-    "autoJumpIcon": {
-      "y": 0.05,
-      "x": 0.01,
-      "enabled": true
-    }
+  "_enemy": [
+
+  ],
+  "FollowPlayerName": "Barry Vrau",
+  "FiltroParty": false,
+  "playerList": {
+    "blackList": [
+
+    ],
+    "highlight": false,
+    "outfits": false,
+    "groupMembers": true,
+    "friendList": [
+
+    ],
+    "enemyList": [
+
+    ],
+    "marks": false
   },
-  "_macros": {
-    "": false,
-    "Auto Jump": true,
-    "Dash Kunai": false,
-    "Auto Follow": false,
-    "Pot Heal 90": false,
-    "Sense": false,
-    "virar target": true,
-    "Turn by target": false,
-    "Bijuu": true,
-    "Fuga 3 ON/OFF": false,
-    "PotMana Perfect 30": false,
-    "Bijuu Macro": true,
-    "Fuga 1 ON/OFF": false,
-    "BugMap": true,
-    "Follow": false,
-    "Summon Hanma": false,
-    "Treinamento": true,
-    "Dance": true,
-    "Hold Target [ESC]": true,
-    "Combo Hashirama": false,
-    "Pot Perfect 60": false,
-    "Auto Mokuton (Defensivo)": false,
-    "Kunai": false,
-    "Combo Madara": false,
-    "Mokuton Jukai Defesa": false,
-    "Follow Attack": false,
-    "Regeneration": false,
-    "Follow PadrÃ£o": false,
-    "Chase Attack": false,
-    "Auto-Pill": true,
-    "Pot Heal 75": true,
-    "Powerdown": true,
-    "Combo Especial": false,
-    "Fugas Especiais": true,
-    "Fuga 4 ON/OFF": false,
-    "Auto Defesa 5secs": false,
-    "Auto Summon": true,
-    "Sense Target": false,
-    "Cast Food": false,
-    "Pot Heal 50": false,
-    "Auto Buff": true,
-    "BIjuu": true,
-    "PotMana 30": false,
-    "Chakra Feet": true,
-    "Follow Player": false,
-    "Fugas Auto": false,
-    "Ataque HP%": true,
-    "Eat Food": true,
-    "xSense": false,
-    "Traps": false,
-    "Auto KAI": true,
-    "Fuga 2 ON/OFF": false
+  "esp_combo": {
+    "text2": "magia 2",
+    "text4": "magia 4",
+    "text6": "magia 6",
+    "text1": "magia 1",
+    "text3": "magia 3",
+    "text5": "magia 5"
   },
-  "_configs": {
-    "cavebot_configs": {
-      "selected": "Iranki",
-      "enabled": false
-    },
-    "targetbot_configs": {
-      "selected": "todos",
-      "enabled": true
-    }
-  },
-  "autoMokuton": {
-    "spell": "mokuton jukai",
-    "enabled": false
-  }
+  "autoTradeMessage": "I'm using OTClientV8!"
 }

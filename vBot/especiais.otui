@@ -23,7 +23,7 @@ espPanel < Panel
 
 espEspeciaisWindow < MainWindow
   !text: tr('- Especiais -')
-  size: 240 480
+  size: 380 580
   color: orange
   @onEscape: self:hide()
 

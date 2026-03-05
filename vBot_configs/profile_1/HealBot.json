@@ -1,0 +1,121 @@
+{
+  "currentHealBotProfile": 1,
+  "ConditionPanel": {
+    "hasteSpell": "concentrate chakra feet",
+    "holdHaste": false,
+    "holdUtamo": false,
+    "utamoCost": 40,
+    "holdUtana": false,
+    "utanaCost": 440,
+    "curePosion": false,
+    "holdUtura": false,
+    "hasteCost": 40,
+    "uturaType": "",
+    "uturaCost": 100,
+    "ignoreInPz": true,
+    "stopHaste": false,
+    "poisonCost": 20,
+    "enabled": false,
+    "cureCurse": false,
+    "curseCost": 80,
+    "cureBleed": false,
+    "bleedCost": 45,
+    "cureBurn": false,
+    "burnCost": 30,
+    "cureElectrify": false,
+    "electrifyCost": 22,
+    "cureParalyse": false,
+    "paralyseCost": 40,
+    "paralyseSpell": "concentrate chakra feet"
+  },
+  "healbot": [
+    {
+      "Cooldown": true,
+      "Delay": true,
+      "name": "Profile #1",
+      "enabled": true,
+      "spellTable": [
+        {
+          "value": 99,
+          "cost": 1,
+          "index": 1,
+          "enabled": true,
+          "origin": "HP%",
+          "spell": "big regeneration",
+          "sign": "<"
+        }
+      ],
+      "itemTable": [
+
+      ],
+      "Conditions": true,
+      "Visible": true,
+      "MessageDelay": false,
+      "Interval": true
+    },
+    {
+      "Cooldown": true,
+      "Delay": true,
+      "name": "Profile #2",
+      "enabled": false,
+      "spellTable": [
+
+      ],
+      "itemTable": [
+
+      ],
+      "Conditions": true,
+      "Visible": true,
+      "MessageDelay": false,
+      "Interval": true
+    },
+    {
+      "Cooldown": true,
+      "Delay": true,
+      "name": "Profile #3",
+      "enabled": false,
+      "spellTable": [
+
+      ],
+      "itemTable": [
+
+      ],
+      "Conditions": true,
+      "Visible": true,
+      "MessageDelay": false,
+      "Interval": true
+    },
+    {
+      "Cooldown": true,
+      "Delay": true,
+      "name": "Profile #4",
+      "enabled": false,
+      "spellTable": [
+
+      ],
+      "itemTable": [
+
+      ],
+      "Conditions": true,
+      "Visible": true,
+      "MessageDelay": false,
+      "Interval": true
+    },
+    {
+      "Cooldown": true,
+      "Delay": true,
+      "name": "Profile #5",
+      "enabled": false,
+      "spellTable": [
+
+      ],
+      "itemTable": [
+
+      ],
+      "Conditions": true,
+      "Visible": true,
+      "MessageDelay": false,
+      "Interval": true
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+espPanel < Panel
+  margin: 3
+
+  VerticalScrollBar
+    id: scrollBar
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    anchors.right: parent.right
+    step: 20
+    pixels-scroll: true
+
+  ScrollablePanel
+    id: scrollArea
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    anchors.left: parent.left
+    anchors.right: scrollBar.left
+    vertical-scrollbar: scrollBar
+    margin-right: 2
+    layout:
+      type: verticalBox
+
+
+espEspeciaisWindow < MainWindow
+  !text: tr('- Especiais -')
+  size: 240 480
+  color: orange
+  @onEscape: self:hide()
+
+  TabBar
+    id: espTabBar
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+
+  Panel
+    id: espImagem
+    anchors.top: espTabBar.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    image-border: 9
+
+  Button
+    id: closeButton
+    !text: tr('Close')
+    font: cipsoftFont
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    size: 45 21
+    margin-top: 15
+    margin-right: 5

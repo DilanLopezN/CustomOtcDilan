@@ -181,35 +181,55 @@ local function styleBotSwitch(widget)
     end
 end
 
+-- Style regular Button: transparent background, keep text color
+local function styleButton(widget)
+    widget:setImageSource("")
+    widget:setBackgroundColor("alpha")
+    widget:setBorderColor(corText)
+end
+
+-- Recursively apply transparent style to all buttons in a widget tree
+local function applyTransparentRecursive(widget)
+    if not widget then return end
+    local className = widget:getClassName()
+
+    if className == "BotSwitch" or className == "UIBotSwitch" then
+        styleBotSwitch(widget)
+        widget.onMousePress = function(w, mousePos, mouseButton)
+            schedule(200, function()
+                styleBotSwitch(w)
+            end)
+        end
+    elseif className == "UIButton" or className == "Button" then
+        styleButton(widget)
+    end
+
+    if widget.getChildren then
+        for _, child in pairs(widget:getChildren()) do
+            applyTransparentRecursive(child)
+        end
+    end
+end
+
 function applyTransparentBotButtons()
     if not storage.visualCustom.transparentBotButtons then return end
 
+    -- Style buttons in the bot panel content
     local botPanel = modules.game_bot.botWindow.contentsPanel.botPanel
-    if not botPanel then return end
-
-    local content = botPanel:recursiveGetChildById("content")
-    if not content then return end
-
-    for _, child in pairs(content:getChildren()) do
-        if child:getClassName() == "BotSwitch" or child:getClassName() == "UIBotSwitch" then
-            styleBotSwitch(child)
-            child.onMousePress = function(widget, mousePos, mouseButton)
-                schedule(200, function()
-                    styleBotSwitch(widget)
-                end)
-            end
+    if botPanel then
+        local content = botPanel:recursiveGetChildById("content")
+        if content then
+            applyTransparentRecursive(content)
         end
-        -- Also check nested children (panels that contain BotSwitches)
-        if child.getChildren then
-            for _, subChild in pairs(child:getChildren()) do
-                if subChild:getClassName() == "BotSwitch" or subChild:getClassName() == "UIBotSwitch" then
-                    styleBotSwitch(subChild)
-                    subChild.onMousePress = function(widget, mousePos, mouseButton)
-                        schedule(200, function()
-                            styleBotSwitch(widget)
-                        end)
-                    end
-                end
+    end
+
+    -- Style buttons in all open windows (EspeciaisWindow, PerfisWindow, etc.)
+    local rootWidget = g_ui.getRootWidget()
+    if rootWidget then
+        for _, child in pairs(rootWidget:getChildren()) do
+            local className = child:getClassName()
+            if className == "UIWindow" or className == "MainWindow" or className == "UIMainWindow" then
+                applyTransparentRecursive(child)
             end
         end
     end

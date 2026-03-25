@@ -2,161 +2,103 @@ setDefaultTab("Uteis")
 
 
 
-UI.Label("Follow Uteis:")
-local followAtk = macro(100, "Auto Follow", function()
-    if not g_game.isAttacking() then return end
-    local target = g_game.getAttackingCreature()
-    if not target then return end
-    g_game.follow(target)
-end)
+--[[
+  ╔══════════════════════════════════════════════════════════╗
+  ║  CHASE & KEEP TARGET - Perseguição 100% (obitoc port)   ║
+  ║  Escadas, buracos, jump up/down, portas, custom IDs     ║
+  ║  ESC = desliga tudo | Sem setDefaultTab (fica na aba)   ║
+  ╚══════════════════════════════════════════════════════════╝
+]]
 
-addIcon("followAtk", {item = 12953, text = "Follow"}, followAtk)
-
-
-
-UI.Separator()
-
-ChaseAttack = {
+-- ============================================================
+-- CONFIG
+-- ============================================================
+CT = {
     targetId = nil,
+    currentTargetId = nil,
     obstaclesQueue = {},
     obstacleWalkTime = 0,
-    currentTargetId = nil,
+    lastCancelFollow = 0,
+    followDelay = 300,
+    keyCancel = 'Escape',
+
     walkDirTable = {
         [0] = {'y', -1},
         [1] = {'x', 1},
         [2] = {'y', 1},
         [3] = {'x', -1},
     },
-    flags = {
-        ignoreNonPathable = true,
-        precision = 0,
-        ignoreCreatures = true
-    },
+
     jumpSpell = {
         up = 'jump up',
         down = 'jump down'
     },
+
+    -- Item usado pra descer buraco (ex: shovel, pick, rope)
     defaultItem = 1111,
+    -- Spell usada em tiles que precisam de spell
     defaultSpell = 'skip',
+
+    -- IDs de tiles interativos (escada, buraco, etc)
+    -- castSpell = true → usa defaultSpell ao invés de clicar
     customIds = {
-        {
-            id = 1948,
-            castSpell = false
-        },
-        {
-            id = 595,
-            castSpell = false
-        },
-        {
-            id = 1067,
-            castSpell = false
-        },
-        {
-            id = 1080,
-            castSpell = false
-        },
-        {
-            id = 386,
-            castSpell = true
-        },
+        { id = 1948, castSpell = false },
+        { id = 595,  castSpell = false },
+        { id = 1067, castSpell = false },
+        { id = 1080, castSpell = false },
+        { id = 386,  castSpell = true  },
     },
-    walkDelay = 200
-};
+}
 
--- Pega o target atual
-ChaseAttack.getTarget = function()
-    return g_game.getAttackingCreature()
+-- ============================================================
+-- FUNÇÕES AUXILIARES (idênticas ao obitoc)
+-- ============================================================
+CT.distanceFromPlayer = function(position)
+    local distx = math.abs(posx() - position.x)
+    local disty = math.abs(posy() - position.y)
+    return math.sqrt(distx * distx + disty * disty)
 end
 
-ChaseAttack.distanceFromPlayer = function(position)
-    local distx = math.abs(posx() - position.x);
-    local disty = math.abs(posy() - position.y);
-    return math.sqrt(distx * distx + disty * disty);
-end
-
-ChaseAttack.walkToPathDir = function(path)
-    if (path) then
-        g_game.walk(path[1], false);
+CT.walkToPathDir = function(path)
+    if path then
+        g_game.walk(path[1], false)
     end
 end
 
-ChaseAttack.getDirection = function(playerPos, direction)
-    local walkDir = ChaseAttack.walkDirTable[direction];
-    if (walkDir) then
-        playerPos[walkDir[1]] = playerPos[walkDir[1]] + walkDir[2];
+CT.getDirection = function(playerPos, direction)
+    local walkDir = CT.walkDirTable[direction]
+    if walkDir then
+        playerPos[walkDir[1]] = playerPos[walkDir[1]] + walkDir[2]
     end
-    return playerPos;
+    return playerPos
 end
 
-ChaseAttack.checkItemOnTile = function(tile, table)
-    if (not tile) then return nil end;
+CT.checkItemOnTile = function(tile, tbl)
+    if not tile then return nil end
     for _, item in ipairs(tile:getItems()) do
-        local itemId = item:getId();
-        for _, itemSelected in ipairs(table) do
-            if (itemId == itemSelected.id) then
-                return itemSelected;
+        local itemId = item:getId()
+        for _, itemSelected in ipairs(tbl) do
+            if itemId == itemSelected.id then
+                return itemSelected
             end
         end
     end
-    return nil;
+    return nil
 end
 
-ChaseAttack.shiftFromQueue = function()
-    table.remove(ChaseAttack.obstaclesQueue, 1);
+CT.shiftFromQueue = function()
+    g_game.cancelFollow()
+    CT.lastCancelFollow = now + CT.followDelay
+    table.remove(CT.obstaclesQueue, 1)
 end
 
-ChaseAttack.checkIfWentToCustomId = function(creature, newPos, oldPos, scheduleTime)
-    local tile = g_map.getTile(oldPos);
-    local customId = ChaseAttack.checkItemOnTile(tile, ChaseAttack.customIds);
-    if (not customId) then return; end
-
-    if (not scheduleTime) then
-        scheduleTime = 0;
-    end
-
-    schedule(scheduleTime, function()
-        if (oldPos.z == posz() or #ChaseAttack.obstaclesQueue > 0) then
-            table.insert(ChaseAttack.obstaclesQueue, {
-                oldPos = oldPos,
-                newPos = newPos,
-                tilePos = oldPos,
-                customId = customId,
-                tile = g_map.getTile(oldPos),
-                isCustom = true
-            });
-        end
-    end);
-end
-
-ChaseAttack.checkIfWentToStair = function(creature, newPos, oldPos, scheduleTime)
-    if (g_map.getMinimapColor(oldPos) ~= 210) then return; end
-    local tile = g_map.getTile(oldPos);
-    if (tile:isPathable()) then return; end
-
-    if (not scheduleTime) then
-        scheduleTime = 0;
-    end
-
-    schedule(scheduleTime, function()
-        if (oldPos.z == posz() or #ChaseAttack.obstaclesQueue > 0) then
-            table.insert(ChaseAttack.obstaclesQueue, {
-                oldPos = oldPos,
-                newPos = newPos,
-                tilePos = oldPos,
-                tile = tile,
-                isStair = true
-            });
-        end
-    end);
-end
-
-ChaseAttack.checkIfWentToDoor = function(creature, newPos, oldPos)
-    if (ChaseAttack.obstaclesQueue[1] and ChaseAttack.distanceFromPlayer(newPos) < ChaseAttack.distanceFromPlayer(oldPos)) then return; end
-    if (math.abs(newPos.x - oldPos.x) == 2 or math.abs(newPos.y - oldPos.y) == 2) then
-        local doorPos = {
-            z = oldPos.z
-        }
-
+-- ============================================================
+-- DETECÇÃO: Porta
+-- ============================================================
+CT.checkIfWentToDoor = function(creature, newPos, oldPos)
+    if CT.obstaclesQueue[1] and CT.distanceFromPlayer(newPos) < CT.distanceFromPlayer(oldPos) then return end
+    if math.abs(newPos.x - oldPos.x) == 2 or math.abs(newPos.y - oldPos.y) == 2 then
+        local doorPos = { z = oldPos.z }
         local directionX = oldPos.x - newPos.x
         local directionY = oldPos.y - newPos.y
 
@@ -178,991 +120,419 @@ ChaseAttack.checkIfWentToDoor = function(creature, newPos, oldPos)
             end
         end
 
-        local doorTile = g_map.getTile(doorPos);
-        if (not doorTile:isPathable() or doorTile:isWalkable()) then return; end
+        local doorTile = g_map.getTile(doorPos)
+        if not doorTile then return end
+        if not doorTile:isPathable() or doorTile:isWalkable() then return end
 
-        table.insert(ChaseAttack.obstaclesQueue, {
+        table.insert(CT.obstaclesQueue, {
             newPos = newPos,
             tilePos = doorPos,
             tile = doorTile,
             isDoor = true,
-        });
+        })
+        g_game.cancelFollow()
+        CT.lastCancelFollow = now + CT.followDelay
     end
 end
 
-ChaseAttack.checkifWentToJumpPos = function(creature, newPos, oldPos)
-    local pos1 = { x = oldPos.x - 1, y = oldPos.y - 1 };
-    local pos2 = { x = oldPos.x + 1, y = oldPos.y + 1 };
+-- ============================================================
+-- DETECÇÃO: Jump (mudou de andar sem escada perto)
+-- ============================================================
+CT.checkifWentToJumpPos = function(creature, newPos, oldPos)
+    local pos1 = { x = oldPos.x - 1, y = oldPos.y - 1 }
+    local pos2 = { x = oldPos.x + 1, y = oldPos.y + 1 }
 
     local hasStair = nil
     for x = pos1.x, pos2.x do
         for y = pos1.y, pos2.y do
-            local tilePos = { x = x, y = y, z = oldPos.z };
-            if (g_map.getMinimapColor(tilePos) == 210) then
-                hasStair = true;
-                goto continue;
+            local tilePos = { x = x, y = y, z = oldPos.z }
+            if g_map.getMinimapColor(tilePos) == 210 then
+                hasStair = true
+                goto continue
             end
         end
     end
     ::continue::
 
-    if (hasStair) then return; end
+    if hasStair then return end
 
-    local spell = newPos.z > oldPos.z and ChaseAttack.jumpSpell.down or ChaseAttack.jumpSpell.up;
-    local dir = creature:getDirection();
+    local spell = newPos.z > oldPos.z and CT.jumpSpell.down or CT.jumpSpell.up
+    local dir = creature:getDirection()
 
-    if (newPos.z > oldPos.z) then
-        spell = ChaseAttack.jumpSpell.down;
-    end
-
-    table.insert(ChaseAttack.obstaclesQueue, {
+    table.insert(CT.obstaclesQueue, {
         oldPos = oldPos,
         oldTile = g_map.getTile(oldPos),
         spell = spell,
         dir = dir,
         isJump = true,
-    });
+    })
+    g_game.cancelFollow()
+    CT.lastCancelFollow = now + CT.followDelay
 end
 
--- Detecta porta
-onCreaturePositionChange(function(creature, newPos, oldPos)
-    if (ChaseAttack.mainMacro.isOff()) then return; end
-    local target = ChaseAttack.getTarget()
-    if (not target) then return; end
+-- ============================================================
+-- DETECÇÃO: Escada (minimap color 210)
+-- ============================================================
+CT.checkIfWentToStair = function(creature, newPos, oldPos, scheduleTime)
+    if g_map.getMinimapColor(oldPos) ~= 210 then return end
+    local tile = g_map.getTile(oldPos)
+    if not tile then return end
+    if tile:isPathable() then return end
 
-    if creature:getId() == target:getId() and newPos and oldPos and oldPos.z == newPos.z then
-        ChaseAttack.checkIfWentToDoor(creature, newPos, oldPos);
+    if not scheduleTime then scheduleTime = 0 end
+
+    schedule(scheduleTime, function()
+        if oldPos.z == posz() or #CT.obstaclesQueue > 0 then
+            table.insert(CT.obstaclesQueue, {
+                oldPos = oldPos,
+                newPos = newPos,
+                tilePos = oldPos,
+                tile = tile,
+                isStair = true
+            })
+            g_game.cancelFollow()
+            CT.lastCancelFollow = now + CT.followDelay
+        end
+    end)
+end
+
+-- ============================================================
+-- DETECÇÃO: Custom ID (buraco, rope, etc)
+-- ============================================================
+CT.checkIfWentToCustomId = function(creature, newPos, oldPos, scheduleTime)
+    local tile = g_map.getTile(oldPos)
+    local customId = CT.checkItemOnTile(tile, CT.customIds)
+    if not customId then return end
+
+    if not scheduleTime then scheduleTime = 0 end
+
+    schedule(scheduleTime, function()
+        if oldPos.z == posz() or #CT.obstaclesQueue > 0 then
+            table.insert(CT.obstaclesQueue, {
+                oldPos = oldPos,
+                newPos = newPos,
+                tilePos = oldPos,
+                customId = customId,
+                tile = g_map.getTile(oldPos),
+                isCustom = true
+            })
+            g_game.cancelFollow()
+            CT.lastCancelFollow = now + CT.followDelay
+        end
+    end)
+end
+
+-- ============================================================
+-- MACRO PRINCIPAL: Chase + Keep Target + Follow
+-- ============================================================
+CT.mainMacro = macro(CT.followDelay, "Chase & Target", function()
+    -- ESC: desliga tudo
+    if modules.corelib.g_keyboard.isKeyPressed(CT.keyCancel) then
+        CT.targetId = nil
+        CT.currentTargetId = nil
+        CT.obstaclesQueue = {}
+        g_game.setChaseMode(0)
+        g_game.cancelAttack()
+        g_game.cancelFollow()
+        return
     end
-end);
 
--- Detecta jump
-onCreaturePositionChange(function(creature, newPos, oldPos)
-    if (ChaseAttack.mainMacro.isOff()) then return; end
-    local target = ChaseAttack.getTarget()
-    if (not target) then return; end
+    local target = g_game.getAttackingCreature()
 
-    if creature:getId() == target:getId() and newPos and oldPos and oldPos.z == posz() and oldPos.z ~= newPos.z then
-        ChaseAttack.checkifWentToJumpPos(creature, newPos, oldPos);
+    -- Se está atacando um player, salva o ID e ativa follow nativo
+    if target and target:isPlayer() then
+        CT.targetId = target:getId()
+        g_game.setChaseMode(1)
+
+        -- Se não tem path direto, cancela follow pra não ficar preso
+        if not findPath(pos(), target:getPosition(), 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = true }) then
+            local followingPlayer = g_game.getFollowingCreature()
+            if followingPlayer and followingPlayer:getId() == target:getId() then
+                CT.lastCancelFollow = now + CT.followDelay
+                return g_game.cancelFollow()
+            end
+        -- Se tem path e não está seguindo, usa g_game.follow()
+        elseif not g_game.getFollowingCreature() and target:canShoot() and CT.lastCancelFollow < now then
+            g_game.follow(target)
+        end
+        return
     end
-end);
 
--- Detecta escada
-onCreaturePositionChange(function(creature, newPos, oldPos)
-    if (ChaseAttack.mainMacro.isOff()) then return; end
-    local target = ChaseAttack.getTarget()
-    if (not target) then return; end
-
-    if creature:getId() == target:getId() and oldPos and g_map.getMinimapColor(oldPos) == 210 then
-        local scheduleTime = oldPos.z == posz() and 0 or 250;
-        ChaseAttack.checkIfWentToStair(creature, newPos, oldPos, scheduleTime);
+    -- Perdeu o alvo: tenta re-atacar pelo ID salvo
+    if CT.targetId then
+        local found = getCreatureById(CT.targetId)
+        if found then
+            g_game.attack(found)
+            g_game.setChaseMode(1)
+            if found:canShoot() and CT.lastCancelFollow < now then
+                g_game.follow(found)
+            end
+        end
+        return delay(found and 500 or 100)
     end
-end);
+end)
+CT.mainMacro.setOff()
+addIcon("ChaseTarget", {item = 14189, text = "Chase"}, CT.mainMacro)
 
--- Detecta custom id
-onCreaturePositionChange(function(creature, newPos, oldPos)
-    if (ChaseAttack.mainMacro.isOff()) then return; end
-    local target = ChaseAttack.getTarget()
-    if (not target) then return; end
-
-    if creature:getId() == target:getId() and oldPos and oldPos.z == posz() and (not newPos or oldPos.z ~= newPos.z) then
-        ChaseAttack.checkIfWentToCustomId(creature, newPos, oldPos);
-    end
-end);
-
--- Limpa fila quando muda de andar
+-- ============================================================
+-- TRACKER: Atualiza o ID do alvo
+-- ============================================================
 macro(1, function()
-    if (ChaseAttack.mainMacro.isOff()) then return; end
-
-    if (ChaseAttack.obstaclesQueue[1] and ((not ChaseAttack.obstaclesQueue[1].isJump and ChaseAttack.obstaclesQueue[1].tilePos.z ~= posz()) or (ChaseAttack.obstaclesQueue[1].isJump and ChaseAttack.obstaclesQueue[1].oldPos.z ~= posz()))) then
-        table.remove(ChaseAttack.obstaclesQueue, 1);
-    end
-end);
-
--- Processa escadas
-macro(100, function()
-    if (ChaseAttack.mainMacro.isOff()) then return; end
-    if (ChaseAttack.obstaclesQueue[1] and ChaseAttack.obstaclesQueue[1].isStair) then
-        local start = now
-        local playerPos = pos();
-        local walkingTile = ChaseAttack.obstaclesQueue[1].tile;
-        local walkingTilePos = ChaseAttack.obstaclesQueue[1].tilePos;
-
-        if (ChaseAttack.distanceFromPlayer(walkingTilePos) < 2) then
-            if (ChaseAttack.obstacleWalkTime < now) then
-                local nextFloor = g_map.getTile(walkingTilePos);
-                if (nextFloor:isPathable()) then
-                    ChaseAttack.obstacleWalkTime = now + 250;
-                    use(nextFloor:getTopUseThing());
-                else
-                    ChaseAttack.obstacleWalkTime = now + 250;
-                    ChaseAttack.walkToPathDir(findPath(playerPos, walkingTilePos, 1, { ignoreCreatures = false, precision = 0, ignoreNonPathable = true }));
-                end
-                ChaseAttack.shiftFromQueue();
-                return 
-            end
-        end
-        local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false });
-        if (path == nil or #path <= 1) then
-            if (path == nil) then
-                use(walkingTile:getTopUseThing());
-            end
-            return
-        end
-        
-        local tileToUse = playerPos;
-        for i, value in ipairs(path) do
-            if (i > 5) then break; end
-            tileToUse = ChaseAttack.getDirection(tileToUse, value);
-        end
-        tileToUse = g_map.getTile(tileToUse);
-        if (tileToUse) then
-            use(tileToUse:getTopUseThing());
+    if CT.mainMacro.isOff() then return end
+    local target = g_game.getAttackingCreature()
+    if target and target:isPlayer() then
+        if CT.currentTargetId ~= target:getId() then
+            CT.currentTargetId = target:getId()
+            CT.targetId = target:getId()
         end
     end
-end);
+end)
 
--- Processa portas
-macro(1, function()
-    if (ChaseAttack.mainMacro.isOff()) then return; end
-
-    if (ChaseAttack.obstaclesQueue[1] and ChaseAttack.obstaclesQueue[1].isDoor) then
-        local playerPos = pos();
-        local walkingTile = ChaseAttack.obstaclesQueue[1].tile;
-        local walkingTilePos = ChaseAttack.obstaclesQueue[1].tilePos;
-        if (table.compare(playerPos, ChaseAttack.obstaclesQueue[1].newPos)) then
-            ChaseAttack.obstacleWalkTime = 0;
-            ChaseAttack.shiftFromQueue();
-        end
-        
-        local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false });
-        if (path == nil or #path <= 1) then
-            if (path == nil) then
-                if (ChaseAttack.obstacleWalkTime < now) then
-                    g_game.use(walkingTile:getTopThing());
-                    ChaseAttack.obstacleWalkTime = now + 500;
-                end
-            end
-            return
-        end
-    end
-end);
-
--- Processa jumps
-macro(100, function()
-    if (ChaseAttack.mainMacro.isOff()) then return; end
-    
-    if (ChaseAttack.obstaclesQueue[1] and ChaseAttack.obstaclesQueue[1].isJump) then
-        local playerPos = pos();
-        local walkingTilePos = ChaseAttack.obstaclesQueue[1].oldPos;
-        local distance = ChaseAttack.distanceFromPlayer(walkingTilePos);
-        if (playerPos.z ~= walkingTilePos.z) then
-            ChaseAttack.shiftFromQueue();
-            return;
-        end
-
-        local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false });
-        
-        if (distance == 0) then
-            g_game.turn(ChaseAttack.obstaclesQueue[1].dir);
-            schedule(50, function()
-                if (ChaseAttack.obstaclesQueue[1]) then
-                    say(ChaseAttack.obstaclesQueue[1].spell);
-                end
-            end)
-            return;
-        elseif (distance < 2) then
-            local nextFloor = g_map.getTile(walkingTilePos);
-            if (ChaseAttack.obstacleWalkTime < now) then
-                ChaseAttack.walkToPathDir(findPath(playerPos, walkingTilePos, 1, { ignoreCreatures = false, precision = 0, ignoreNonPathable = true }));
-                ChaseAttack.obstacleWalkTime = now + 500;
-            end
-            return 
-        elseif (distance >= 2 and distance < 5 and path) then
-            use(ChaseAttack.obstaclesQueue[1].oldTile:getTopUseThing());
-        elseif (path) then
-            local tileToUse = playerPos;
-            for i, value in ipairs(path) do
-                if (i > 5) then break; end
-                tileToUse = ChaseAttack.getDirection(tileToUse, value);
-            end
-            tileToUse = g_map.getTile(tileToUse);
-            if (tileToUse) then
-                use(tileToUse:getTopUseThing());
-            end
-        end
-    end
-end);
-
--- Processa custom ids
-macro(100, function()
-    if (ChaseAttack.mainMacro.isOff()) then return; end
-    
-    if (ChaseAttack.obstaclesQueue[1] and ChaseAttack.obstaclesQueue[1].isCustom) then
-        local playerPos = pos();
-        local walkingTile = ChaseAttack.obstaclesQueue[1].tile;
-        local walkingTilePos = ChaseAttack.obstaclesQueue[1].tilePos;
-        local distance = ChaseAttack.distanceFromPlayer(walkingTilePos);
-        if (playerPos.z ~= walkingTilePos.z) then
-            ChaseAttack.shiftFromQueue();
-            return;
-        end
-        
-        if (distance == 0) then
-            if (ChaseAttack.obstaclesQueue[1].customId.castSpell) then
-                say(ChaseAttack.defaultSpell);
-                return;
-            end
-        elseif (distance < 2) then
-            local item = findItem(ChaseAttack.defaultItem)
-            if (ChaseAttack.obstaclesQueue[1].customId.castSpell or not item) then
-                local nextFloor = g_map.getTile(walkingTilePos);
-                if (ChaseAttack.obstacleWalkTime < now) then
-                    ChaseAttack.walkToPathDir(findPath(playerPos, walkingTilePos, 1, { ignoreCreatures = false, precision = 0, ignoreNonPathable = true }));
-                    ChaseAttack.obstacleWalkTime = now + 500;
-                end
-            elseif (item) then
-                g_game.useWith(item, walkingTile);
-                ChaseAttack.shiftFromQueue();
-            end
-            return 
-        end
-
-        local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false });
-        if (path == nil or #path <= 1) then
-            if (path == nil) then
-                use(walkingTile:getTopUseThing());
-            end
-            return
-        end
-        
-        local tileToUse = playerPos;
-        for i, value in ipairs(path) do
-            if (i > 5) then break; end
-            tileToUse = ChaseAttack.getDirection(tileToUse, value);
-        end
-        tileToUse = g_map.getTile(tileToUse);
-        if (tileToUse) then
-            use(tileToUse:getTopUseThing());
-        end
-    end
-end);
-
--- Macro principal - SEM g_game.follow(), apenas autoWalk
-ChaseAttack.mainMacro = macro(ChaseAttack.walkDelay, 'Chase Attack', function()
-    local target = ChaseAttack.getTarget()
-    if (not target) then return; end
-    
-    -- Atualiza o ID do target atual
-    if (ChaseAttack.currentTargetId ~= target:getId()) then
-        ChaseAttack.currentTargetId = target:getId();
-        ChaseAttack.obstaclesQueue = {}; -- Limpa fila ao trocar de target
-    end
-    
-    -- Se tem obstáculo na fila, deixa as outras macros processarem
-    if (#ChaseAttack.obstaclesQueue > 0) then return; end
-    
-    local targetPos = target:getPosition()
-    if (not targetPos) then return; end
-    
-    local myPos = pos()
-    
-    -- Se no mesmo andar, usa autoWalk para chegar perto
-    if (targetPos.z == myPos.z) then
-        local path = findPath(myPos, targetPos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = true })
-        if (not path) then return; end
-        
-        -- Se está longe, anda até o target
-        if (#path > 1 and not player:isWalking()) then
-            autoWalk(targetPos, 20, {ignoreNonPathable = true, precision = 1})
-        end
-    end
-end);
-
--- Atualiza o target ID quando muda
-macro(1, function()
-    if (ChaseAttack.mainMacro.isOff()) then return; end
-    local target = ChaseAttack.getTarget()
-
-    if (target and ChaseAttack.currentTargetId ~= target:getId()) then
-        ChaseAttack.currentTargetId = target:getId();
-    end
-end);
-
--- Cancela walk se target sumiu ou mudou de andar
+-- Cancela follow se o alvo mudou de andar
 macro(1000, function()
-    if (ChaseAttack.mainMacro.isOff()) then return; end
-    local target = ChaseAttack.getTarget()
-
-    if (target) then
-        local targetPos = target:getPosition();
-
-        if (not targetPos or targetPos.z ~= posz()) then
-            -- Target em outro andar, não cancela o walk
-            -- deixa as macros de obstáculo processarem
+    if CT.mainMacro.isOff() then return end
+    local target = g_game.getFollowingCreature()
+    if target then
+        local targetPos = target:getPosition()
+        if not targetPos or targetPos.z ~= posz() then
+            g_game.cancelFollow()
         end
     end
-end);
-
-
--- Ícone toggle na tela
-local chaseIcon = addIcon("chaseAttack", {text="Chase\nAttack", switchable=false, moveable=true}, function()
-    if ChaseAttack.mainMacro.isOn() then
-        ChaseAttack.mainMacro.setOff()
-    else
-        ChaseAttack.mainMacro.setOn()
-    end
 end)
-chaseIcon:setSize({height=30, width=50})
-chaseIcon.text:setFont('verdana-11px-rounded')
 
-macro(50, function()
-    if ChaseAttack.mainMacro.isOn() then
-        chaseIcon.text:setColoredText({"Chase\n","white","ON","green"})
-    else
-        chaseIcon.text:setColoredText({"Chase\n","white","OFF","red"})
+-- ============================================================
+-- LISTENERS: Detectam movimentação do alvo
+-- ============================================================
+
+-- Porta (mesmo andar)
+onCreaturePositionChange(function(creature, newPos, oldPos)
+    if CT.mainMacro.isOff() then return end
+    if not CT.currentTargetId then return end
+    if creature:getId() == CT.currentTargetId and newPos and oldPos and oldPos.z == newPos.z then
+        CT.checkIfWentToDoor(creature, newPos, oldPos)
     end
 end)
 
-
-
-UI.Separator()
-
-FollowPlayer = {
-  targetId = nil,
-  obstaclesQueue = {},
-  obstacleWalkTime = 0,
-  currentTargetId = nil,
-  keyToClearTarget = 'Escape',
-  walkDirTable = {
-      [0] = {'y', -1},
-      [1] = {'x', 1},
-      [2] = {'y', 1},
-      [3] = {'x', -1},
-  },
-  flags = {
-      ignoreNonPathable = true,
-      precision = 0,
-      ignoreCreatures = true
-  },
-  jumpSpell = {
-      up = 'jump up',
-      down = 'jump down'
-  },
-  defaultItem = 1111,
-  defaultSpell = 'skip',
-  customIds = {
-      {
-          id = 1948,
-          castSpell = false
-      },
-      {
-          id = 595,
-          castSpell = false
-      },
-      {
-          id = 1067,
-          castSpell = false
-      },
-      {
-          id = 1080,
-          castSpell = false
-      },
-      {
-          id = 386,
-          castSpell = true
-      },
-  },
-  lastCancelFollow = 0,
-  followDelay = 300
-};
-
-
-FollowPlayer.distanceFromPlayer = function(position)
-  local distx = math.abs(posx() - position.x);
-  local disty = math.abs(posy() - position.y);
-
-  return math.sqrt(distx * distx + disty * disty);
-end
-
-FollowPlayer.walkToPathDir = function(path)
-  if (path) then
-      g_game.walk(path[1], false);
-  end
-end
-
-FollowPlayer.getDirection = function(playerPos, direction)
-  local walkDir = FollowPlayer.walkDirTable[direction];
-  if (walkDir) then
-      playerPos[walkDir[1]] = playerPos[walkDir[1]] + walkDir[2];
-  end
-  return playerPos;
-end
-
-
-FollowPlayer.checkItemOnTile = function(tile, table)
-  if (not tile) then return nil end;
-  for _, item in ipairs(tile:getItems()) do
-      local itemId = item:getId();
-      for _, itemSelected in ipairs(table) do
-          if (itemId == itemSelected.id) then
-              return itemSelected;
-          end
-      end
-  end
-  return nil;
-end
-
-FollowPlayer.shiftFromQueue = function()
-  g_game.cancelFollow();
-  lastCancelFollow = now + FollowPlayer.followDelay;
-  table.remove(FollowPlayer.obstaclesQueue, 1);
-end
-
-FollowPlayer.checkIfWentToCustomId = function(creature, newPos, oldPos, scheduleTime)
-  local tile = g_map.getTile(oldPos);
-
-  local customId = FollowPlayer.checkItemOnTile(tile, FollowPlayer.customIds);
-
-  if (not customId) then return; end
-
-  if (not scheduleTime) then
-      scheduleTime = 0;
-  end
-
-  schedule(scheduleTime, function()
-      if (oldPos.z == posz() or #FollowPlayer.obstaclesQueue > 0) then
-          table.insert(FollowPlayer.obstaclesQueue, {
-              oldPos = oldPos,
-              newPos = newPos,
-              tilePos = oldPos,
-              customId = customId,
-              tile = g_map.getTile(oldPos),
-              isCustom = true
-          });
-          g_game.cancelFollow();
-          lastCancelFollow = now + FollowPlayer.followDelay;
-      end
-  end);
-end
-
-
-FollowPlayer.checkIfWentToStair = function(creature, newPos, oldPos, scheduleTime)
-
-  if (g_map.getMinimapColor(oldPos) ~= 210) then return; end
-  local tile = g_map.getTile(oldPos);
-
-  if (tile:isPathable()) then return; end
-
-  if (not scheduleTime) then
-      scheduleTime = 0;
-  end
-
-  schedule(scheduleTime, function()
-      if (oldPos.z == posz() or #FollowPlayer.obstaclesQueue > 0) then
-          table.insert(FollowPlayer.obstaclesQueue, {
-              oldPos = oldPos,
-              newPos = newPos,
-              tilePos = oldPos,
-              tile = tile,
-              isStair = true
-          });
-          g_game.cancelFollow();
-          lastCancelFollow = now + FollowPlayer.followDelay;
-      end
-  end);
-end
-
-
-FollowPlayer.checkIfWentToDoor = function(creature, newPos, oldPos)
-  if (FollowPlayer.obstaclesQueue[1] and FollowPlayer.distanceFromPlayer(newPos) < FollowPlayer.distanceFromPlayer(oldPos)) then return; end
-  if (math.abs(newPos.x - oldPos.x) == 2 or math.abs(newPos.y - oldPos.y) == 2) then
-          
-
-      local doorPos = {
-          z = oldPos.z
-      }
-
-      local directionX = oldPos.x - newPos.x
-      local directionY = oldPos.y - newPos.y
-
-      if math.abs(directionX) > math.abs(directionY) then
-
-          if directionX > 0 then
-              doorPos.x = newPos.x + 1
-              doorPos.y = newPos.y
-          else
-              doorPos.x = newPos.x - 1
-              doorPos.y = newPos.y
-          end
-      else
-          if directionY > 0 then
-              doorPos.x = newPos.x
-              doorPos.y = newPos.y + 1
-          else
-              doorPos.x = newPos.x
-              doorPos.y = newPos.y - 1
-          end
-      end
-
-      local doorTile = g_map.getTile(doorPos);
-
-      if (not doorTile:isPathable() or doorTile:isWalkable()) then return; end
-
-      table.insert(FollowPlayer.obstaclesQueue, {
-          newPos = newPos,
-          tilePos = doorPos,
-          tile = doorTile,
-          isDoor = true,
-      });
-      g_game.cancelFollow();
-      lastCancelFollow = now + FollowPlayer.followDelay;
-  end
-end
-
-
-FollowPlayer.checkifWentToJumpPos = function(creature, newPos, oldPos)
-  local pos1 = { x = oldPos.x - 1, y = oldPos.y - 1 };
-  local pos2 = { x = oldPos.x + 1, y = oldPos.y + 1 };
-
-  local hasStair = nil
-  for x = pos1.x, pos2.x do
-      for y = pos1.y, pos2.y do
-          local tilePos = { x = x, y = y, z = oldPos.z };
-          if (g_map.getMinimapColor(tilePos) == 210) then
-              hasStair = true;
-              goto continue;
-          end
-      end
-  end
-  ::continue::
-
-  if (hasStair) then return; end
-
-  local spell = newPos.z > oldPos.z and FollowPlayer.jumpSpell.down or FollowPlayer.jumpSpell.up;
-  local dir = creature:getDirection();
-
-  if (newPos.z > oldPos.z) then
-      spell = FollowPlayer.jumpSpell.down;
-  end
-
-  table.insert(FollowPlayer.obstaclesQueue, {
-      oldPos = oldPos,
-      oldTile = g_map.getTile(oldPos),
-      spell = spell,
-      dir = dir,
-      isJump = true,
-  });
-  g_game.cancelFollow();
-  lastCancelFollow = now + FollowPlayer.followDelay;
-end
-
-
+-- Jump (mudou de andar sem escada perto)
 onCreaturePositionChange(function(creature, newPos, oldPos)
-  if (FollowPlayer.mainMacro.isOff()) then return; end
+    if CT.mainMacro.isOff() then return end
+    if not CT.currentTargetId then return end
+    if creature:getId() == CT.currentTargetId and newPos and oldPos and oldPos.z == posz() and oldPos.z ~= newPos.z then
+        CT.checkifWentToJumpPos(creature, newPos, oldPos)
+    end
+end)
 
-  if creature:getId() == FollowPlayer.currentTargetId and newPos and oldPos and oldPos.z == newPos.z then
-      FollowPlayer.checkIfWentToDoor(creature, newPos, oldPos);
-  end
-end);
-
-
+-- Escada (minimap color 210)
 onCreaturePositionChange(function(creature, newPos, oldPos)
-  if (FollowPlayer.mainMacro.isOff()) then return; end
+    if CT.mainMacro.isOff() then return end
+    if not CT.currentTargetId then return end
+    if creature:getId() == CT.currentTargetId and oldPos and g_map.getMinimapColor(oldPos) == 210 then
+        local scheduleTime = oldPos.z == posz() and 0 or 250
+        CT.checkIfWentToStair(creature, newPos, oldPos, scheduleTime)
+    end
+end)
 
-  if creature:getId() == FollowPlayer.currentTargetId and newPos and oldPos and oldPos.z == posz() and oldPos.z ~= newPos.z then
-      FollowPlayer.checkifWentToJumpPos(creature, newPos, oldPos);
-  end
-end);
-
-
+-- Custom IDs (buracos, ropes, etc)
 onCreaturePositionChange(function(creature, newPos, oldPos)
-  if (FollowPlayer.mainMacro.isOff()) then return; end
+    if CT.mainMacro.isOff() then return end
+    if not CT.currentTargetId then return end
+    if creature:getId() == CT.currentTargetId and oldPos and oldPos.z == posz() and (not newPos or oldPos.z ~= newPos.z) then
+        CT.checkIfWentToCustomId(creature, newPos, oldPos)
+    end
+end)
 
-  if creature:getId() == FollowPlayer.currentTargetId and oldPos and g_map.getMinimapColor(oldPos) == 210 then
-      local scheduleTime = oldPos.z == posz() and 0 or 250;
-
-      FollowPlayer.checkIfWentToStair(creature, newPos, oldPos, scheduleTime);
-  end
-end);
-
-
-
-onCreaturePositionChange(function(creature, newPos, oldPos)
-  if (FollowPlayer.mainMacro.isOff()) then return; end
-  if creature:getId() == FollowPlayer.currentTargetId and oldPos and oldPos.z == posz() and (not newPos or oldPos.z ~= newPos.z) then
-      FollowPlayer.checkIfWentToCustomId(creature, newPos, oldPos);
-  end
-end);
-
-
+-- ============================================================
+-- LIMPEZA DA FILA: Remove obstáculos de andares errados
+-- ============================================================
 macro(1, function()
-  if (FollowPlayer.mainMacro.isOff()) then return; end
+    if CT.mainMacro.isOff() then return end
+    if CT.obstaclesQueue[1] and ((not CT.obstaclesQueue[1].isJump and CT.obstaclesQueue[1].tilePos.z ~= posz()) or (CT.obstaclesQueue[1].isJump and CT.obstaclesQueue[1].oldPos.z ~= posz())) then
+        table.remove(CT.obstaclesQueue, 1)
+    end
+end)
 
-  if (FollowPlayer.obstaclesQueue[1] and ((not FollowPlayer.obstaclesQueue[1].isJump and FollowPlayer.obstaclesQueue[1].tilePos.z ~= posz()) or (FollowPlayer.obstaclesQueue[1].isJump and FollowPlayer.obstaclesQueue[1].oldPos.z ~= posz()))) then
-      table.remove(FollowPlayer.obstaclesQueue, 1);
-  end
-end);
-
-
-
+-- ============================================================
+-- PROCESSADOR: Escadas (idêntico obitoc)
+-- ============================================================
 macro(100, function()
-  if (FollowPlayer.mainMacro.isOff()) then return; end
-  if (FollowPlayer.obstaclesQueue[1] and FollowPlayer.obstaclesQueue[1].isStair) then
-      local start = now
-      local playerPos = pos();
-      local walkingTile = FollowPlayer.obstaclesQueue[1].tile;
-      local walkingTilePos = FollowPlayer.obstaclesQueue[1].tilePos;
+    if CT.mainMacro.isOff() then return end
+    if not (CT.obstaclesQueue[1] and CT.obstaclesQueue[1].isStair) then return end
 
-      if (FollowPlayer.distanceFromPlayer(walkingTilePos) < 2) then
-          if (FollowPlayer.obstacleWalkTime < now) then
-              local nextFloor = g_map.getTile(walkingTilePos);
-              if (nextFloor:isPathable()) then
-                  FollowPlayer.obstacleWalkTime = now + 250;
-                  use(nextFloor:getTopUseThing());
-              else
-                  FollowPlayer.obstacleWalkTime = now + 250;
-                  FollowPlayer.walkToPathDir(findPath(playerPos, walkingTilePos, 1, { ignoreCreatures = false, precision = 0, ignoreNonPathable = true }));
-              end
-              FollowPlayer.shiftFromQueue();
-              return 
-          end
-      end
-      local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false });
-      if (path == nil or #path <= 1) then
-          if (path == nil) then
-              use(walkingTile:getTopUseThing());
-          end
-          return
-      end
-      
-      local tileToUse = playerPos;
-      for i, value in ipairs(path) do
-          if (i > 5) then break; end
-          tileToUse = FollowPlayer.getDirection(tileToUse, value);
-      end
-      tileToUse = g_map.getTile(tileToUse);
-      if (tileToUse) then
-          use(tileToUse:getTopUseThing());
-      end
-  end
-end);
+    local playerPos = pos()
+    local walkingTile = CT.obstaclesQueue[1].tile
+    local walkingTilePos = CT.obstaclesQueue[1].tilePos
 
-
-macro(1, function()
-  if (FollowPlayer.mainMacro.isOff()) then return; end
-
-  if (FollowPlayer.obstaclesQueue[1] and FollowPlayer.obstaclesQueue[1].isDoor) then
-      local playerPos = pos();
-      local walkingTile = FollowPlayer.obstaclesQueue[1].tile;
-      local walkingTilePos = FollowPlayer.obstaclesQueue[1].tilePos;
-      if (table.compare(playerPos, FollowPlayer.obstaclesQueue[1].newPos)) then
-          FollowPlayer.obstacleWalkTime = 0;
-          FollowPlayer.shiftFromQueue();
-      end
-      
-      local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false });
-      if (path == nil or #path <= 1) then
-          if (path == nil) then
-
-              if (FollowPlayer.obstacleWalkTime < now) then
-                  g_game.use(walkingTile:getTopThing());
-                  FollowPlayer.obstacleWalkTime = now + 500;
-              end
-          end
-          return
-      end
-  end
-end);
-
-
-macro(100, function()
-  if (FollowPlayer.mainMacro.isOff()) then return; end
-  
-  if (FollowPlayer.obstaclesQueue[1] and FollowPlayer.obstaclesQueue[1].isJump) then
-      local playerPos = pos();
-      local walkingTilePos = FollowPlayer.obstaclesQueue[1].oldPos;
-      local distance = FollowPlayer.distanceFromPlayer(walkingTilePos);
-      if (playerPos.z ~= walkingTilePos.z) then
-          FollowPlayer.shiftFromQueue();
-          return;
-      end
-
-      local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false });
-      
-      if (distance == 0) then
-          g_game.turn(FollowPlayer.obstaclesQueue[1].dir);
-          schedule(50, function()
-              if (FollowPlayer.obstaclesQueue[1]) then
-                  say(FollowPlayer.obstaclesQueue[1].spell);
-              end
-          end)
-          return;
-      elseif (distance < 2) then
-          local nextFloor = g_map.getTile(walkingTilePos);
-          if (FollowPlayer.obstacleWalkTime < now) then
-              FollowPlayer.walkToPathDir(findPath(playerPos, walkingTilePos, 1, { ignoreCreatures = false, precision = 0, ignoreNonPathable = true }));
-              FollowPlayer.obstacleWalkTime = now + 500;
-          end
-          return 
-      elseif (distance >= 2 and distance < 5 and path) then
-          use(FollowPlayer.obstaclesQueue[1].oldTile:getTopUseThing());
-      elseif (path) then
-          local tileToUse = playerPos;
-          for i, value in ipairs(path) do
-              if (i > 5) then break; end
-              tileToUse = FollowPlayer.getDirection(tileToUse, value);
-          end
-          tileToUse = g_map.getTile(tileToUse);
-          if (tileToUse) then
-              use(tileToUse:getTopUseThing());
-          end
-      end
-  end
-end);
-
-
-macro(100, function()
-  if (FollowPlayer.mainMacro.isOff()) then return; end
-  
-  if (FollowPlayer.obstaclesQueue[1] and FollowPlayer.obstaclesQueue[1].isCustom) then
-      local playerPos = pos();
-      local walkingTile = FollowPlayer.obstaclesQueue[1].tile;
-      local walkingTilePos = FollowPlayer.obstaclesQueue[1].tilePos;
-      local distance = FollowPlayer.distanceFromPlayer(walkingTilePos);
-      if (playerPos.z ~= walkingTilePos.z) then
-          FollowPlayer.shiftFromQueue();
-          return;
-      end
-      
-      if (distance == 0) then
-          if (FollowPlayer.obstaclesQueue[1].customId.castSpell) then
-              say(FollowPlayer.defaultSpell);
-              return;
-          end
-      elseif (distance < 2) then
-          local item = findItem(FollowPlayer.defaultItem)
-          if (FollowPlayer.obstaclesQueue[1].customId.castSpell or not item) then
-              local nextFloor = g_map.getTile(walkingTilePos);
-              if (FollowPlayer.obstacleWalkTime < now) then
-                  FollowPlayer.walkToPathDir(findPath(playerPos, walkingTilePos, 1, { ignoreCreatures = false, precision = 0, ignoreNonPathable = true }));
-                  FollowPlayer.obstacleWalkTime = now + 500;
-              end
-          elseif (item) then
-              g_game.useWith(item, walkingTile);
-              FollowPlayer.shiftFromQueue();
-          end
-          return 
-      end
-
-      local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false });
-      if (path == nil or #path <= 1) then
-          if (path == nil) then
-              use(walkingTile:getTopUseThing());
-          end
-          return
-      end
-      
-      local tileToUse = playerPos;
-      for i, value in ipairs(path) do
-          if (i > 5) then break; end
-          tileToUse = FollowPlayer.getDirection(tileToUse, value);
-      end
-      tileToUse = g_map.getTile(tileToUse);
-      if (tileToUse) then
-          use(tileToUse:getTopUseThing());
-      end
-  end
-end);
-
-
-addTextEdit("FollowPlayer", storage.FollowPlayerName or "Nome do player", function(widget, text)
-  storage.FollowPlayerName = text;
-end);
-
-FollowPlayer.mainMacro = macro(FollowPlayer.followDelay, 'Follow Player', function()
-  local followingPlayer = g_game.getFollowingCreature();
-  local playerToFollow = getCreatureByName(storage.FollowPlayerName);
-  if (not playerToFollow) then return; end
-  if (not findPath(pos(), playerToFollow:getPosition(), 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = true })) then
-      if (followingPlayer and followingPlayer:getId() == playerToFollow:getId()) then
-          lastCancelFollow = now + FollowPlayer.followDelay;
-          return g_game.cancelFollow();
-      end
-  elseif (not followingPlayer and playerToFollow and playerToFollow:canShoot() and FollowPlayer.lastCancelFollow < now) then
-      g_game.follow(playerToFollow);
-  end
-end);
-
-
-macro(1, function()
-  if (FollowPlayer.mainMacro.isOff()) then return; end
-  local playerToFollow = getCreatureByName(storage.FollowPlayerName);
-
-  if (playerToFollow and FollowPlayer.currentTargetId ~= playerToFollow:getId()) then
-      FollowPlayer.currentTargetId = playerToFollow:getId();
-  end
-end);
-
-macro(1000, function()
-  if (FollowPlayer.mainMacro.isOff()) then return; end
-  local target = g_game.getFollowingCreature();
-
-
-  if (target) then
-      local targetPos = target:getPosition();
-
-      if (not targetPos or targetPos.z ~= posz()) then
-          g_game.cancelFollow();
-      end
-  end
-end);
-
-
-
-
-UI.Separator()
------------------------------------------------------------------------------------------------------------------------------------------------------
--- Follow Attack: Ataca o mesmo alvo que seu parceiro está atacando
-storage.followAttackNick = storage.followAttackNick or ""
-
-local followAttackPanel = setupUI([[
-Panel
-  height: 20
-  margin-top: 5
-
-  Label
-    text: Parceiro:
-    anchors.left: parent.left
-    anchors.verticalCenter: parent.verticalCenter
-    width: 55
-    font: verdana-11px-rounded
-
-  BotTextEdit
-    id: nickInput
-    anchors.left: prev.right
-    anchors.right: parent.right
-    anchors.verticalCenter: parent.verticalCenter
-    margin-left: 5
-]], rightPanel)
-
-followAttackPanel.nickInput:setText(storage.followAttackNick)
-followAttackPanel.nickInput.onTextChange = function(widget, text)
-  storage.followAttackNick = text
-end
-
--- Controle para desativar/reativar Follow Player automaticamente
-local followPlayerWasOn = false
-
--- Armazena o último target do parceiro para detectar quando ele INICIA um ataque
-local parceiroLastTarget = nil
-
-local followAttackMacro = macro(200, "Follow Attack", function()
-  local parceiro = storage.followAttackNick
-  if parceiro == "" then return end
-  
-  local parceiroCreature = getCreatureByName(parceiro)
-  if not parceiroCreature then return end
-  
-  local parceiroPos = parceiroCreature:getPosition()
-  local myPos = pos()
-  if not parceiroPos or parceiroPos.z ~= myPos.z then return end
-  
-  -- Verifica se o PARCEIRO está atacando alguém (virado para um player adjacente)
-  local parceiroTarget = nil
-  for _, spec in ipairs(getSpectators()) do
-    if spec ~= player and spec:getName() ~= parceiro and spec:isPlayer() then
-      local specPos = spec:getPosition()
-      if specPos and specPos.z == parceiroPos.z then
-        local dist = getDistanceBetween(parceiroPos, specPos)
-        if dist <= 1 then
-          -- Verifica se o parceiro está virado para essa criatura (indica ataque)
-          local dir = parceiroCreature:getDirection()
-          local dx = specPos.x - parceiroPos.x
-          local dy = specPos.y - parceiroPos.y
-          
-          local isLookingAt = false
-          -- Norte
-          if dir == 0 and dy == -1 and math.abs(dx) <= 1 then isLookingAt = true
-          -- Leste
-          elseif dir == 1 and dx == 1 and math.abs(dy) <= 1 then isLookingAt = true
-          -- Sul
-          elseif dir == 2 and dy == 1 and math.abs(dx) <= 1 then isLookingAt = true
-          -- Oeste
-          elseif dir == 3 and dx == -1 and math.abs(dy) <= 1 then isLookingAt = true
-          -- Nordeste
-          elseif dir == 4 and dx >= 0 and dy <= 0 and dist <= 1 then isLookingAt = true
-          -- Sudeste
-          elseif dir == 5 and dx >= 0 and dy >= 0 and dist <= 1 then isLookingAt = true
-          -- Sudoeste
-          elseif dir == 6 and dx <= 0 and dy >= 0 and dist <= 1 then isLookingAt = true
-          -- Noroeste
-          elseif dir == 7 and dx <= 0 and dy <= 0 and dist <= 1 then isLookingAt = true
-          end
-          
-          if isLookingAt then
-            parceiroTarget = spec
-            break
-          end
+    if CT.distanceFromPlayer(walkingTilePos) < 2 then
+        if CT.obstacleWalkTime < now then
+            local nextFloor = g_map.getTile(walkingTilePos)
+            if nextFloor and nextFloor:isPathable() then
+                CT.obstacleWalkTime = now + 250
+                use(nextFloor:getTopUseThing())
+            else
+                CT.obstacleWalkTime = now + 250
+                CT.walkToPathDir(findPath(playerPos, walkingTilePos, 1, { ignoreCreatures = false, precision = 0, ignoreNonPathable = true }))
+            end
+            CT.shiftFromQueue()
+            return
         end
-      end
     end
-  end
-  
-  -- Se parceiro não está atacando ninguém, limpa o último target e não faz nada
-  if not parceiroTarget then 
-    parceiroLastTarget = nil
-    return 
-  end
-  
-  -- Só ataca se for um NOVO target (parceiro iniciou ataque)
-  -- Ou se já estamos atacando o mesmo target (continua)
-  local currentAttack = g_game.getAttackingCreature()
-  if currentAttack and currentAttack:getId() == parceiroTarget:getId() then
-    -- Já estamos atacando o mesmo, apenas segue
-  elseif parceiroLastTarget ~= parceiroTarget:getId() then
-    -- É um novo target, parceiro iniciou ataque em alguém novo
-    parceiroLastTarget = parceiroTarget:getId()
-    g_game.attack(parceiroTarget)
-  else
-    -- Mesmo target de antes mas não estamos atacando, inicia ataque
-    if not currentAttack then
-      g_game.attack(parceiroTarget)
+
+    local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false })
+    if path == nil or #path <= 1 then
+        if path == nil then
+            use(walkingTile:getTopUseThing())
+        end
+        return
     end
-  end
-  
-  -- Anda até o target
-  if player:isWalking() then return end
-  local tpos = parceiroTarget:getPosition()
-  if getDistanceBetween(myPos, tpos) > 1 then
-    autoWalk(tpos, 20, {ignoreNonPathable=true, precision=1})
-  end
+
+    local tileToUse = playerPos
+    for i, value in ipairs(path) do
+        if i > 5 then break end
+        tileToUse = CT.getDirection(tileToUse, value)
+    end
+    tileToUse = g_map.getTile(tileToUse)
+    if tileToUse then
+        use(tileToUse:getTopUseThing())
+    end
 end)
 
--- Macro para controlar Follow Player quando atacando
+-- ============================================================
+-- PROCESSADOR: Portas (idêntico obitoc)
+-- ============================================================
+macro(1, function()
+    if CT.mainMacro.isOff() then return end
+    if not (CT.obstaclesQueue[1] and CT.obstaclesQueue[1].isDoor) then return end
+
+    local playerPos = pos()
+    local walkingTile = CT.obstaclesQueue[1].tile
+    local walkingTilePos = CT.obstaclesQueue[1].tilePos
+
+    if table.compare and table.compare(playerPos, CT.obstaclesQueue[1].newPos) then
+        CT.obstacleWalkTime = 0
+        CT.shiftFromQueue()
+        return
+    end
+
+    local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false })
+    if path == nil or #path <= 1 then
+        if path == nil then
+            if CT.obstacleWalkTime < now then
+                g_game.use(walkingTile:getTopThing())
+                CT.obstacleWalkTime = now + 500
+            end
+        end
+        return
+    end
+end)
+
+-- ============================================================
+-- PROCESSADOR: Jumps (idêntico obitoc)
+-- ============================================================
 macro(100, function()
-  if followAttackMacro.isOff() then return end
-  
-  local attacking = g_game.isAttacking()
-  
-  if attacking then
-    -- Está atacando: desativa Follow Player se estava ligado
-    if FollowPlayer.mainMacro.isOn() then
-      followPlayerWasOn = true
-      FollowPlayer.mainMacro.setOff()
+    if CT.mainMacro.isOff() then return end
+    if not (CT.obstaclesQueue[1] and CT.obstaclesQueue[1].isJump) then return end
+
+    local playerPos = pos()
+    local walkingTilePos = CT.obstaclesQueue[1].oldPos
+    local distance = CT.distanceFromPlayer(walkingTilePos)
+
+    if playerPos.z ~= walkingTilePos.z then
+        CT.shiftFromQueue()
+        return
     end
-  else
-    -- Não está atacando: reativa Follow Player se foi desativado automaticamente
-    if followPlayerWasOn and FollowPlayer.mainMacro.isOff() then
-      FollowPlayer.mainMacro.setOn()
-      followPlayerWasOn = false
+
+    local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false })
+
+    -- Em cima do tile: vira e fala a spell
+    if distance == 0 then
+        g_game.turn(CT.obstaclesQueue[1].dir)
+        schedule(50, function()
+            if CT.obstaclesQueue[1] then
+                say(CT.obstaclesQueue[1].spell)
+            end
+        end)
+        return
+    -- Perto: anda 1 sqm até o tile
+    elseif distance < 2 then
+        if CT.obstacleWalkTime < now then
+            CT.walkToPathDir(findPath(playerPos, walkingTilePos, 1, { ignoreCreatures = false, precision = 0, ignoreNonPathable = true }))
+            CT.obstacleWalkTime = now + 500
+        end
+        return
+    -- Médio: usa o tile diretamente
+    elseif distance >= 2 and distance < 5 and path then
+        use(CT.obstaclesQueue[1].oldTile:getTopUseThing())
+    -- Longe: navega pelo path
+    elseif path then
+        local tileToUse = playerPos
+        for i, value in ipairs(path) do
+            if i > 5 then break end
+            tileToUse = CT.getDirection(tileToUse, value)
+        end
+        tileToUse = g_map.getTile(tileToUse)
+        if tileToUse then
+            use(tileToUse:getTopUseThing())
+        end
     end
-  end
 end)
 
-addIcon("followAttackMacro", {item = 12953, text = "Follow\nATK"}, followAttackMacro)
+-- ============================================================
+-- PROCESSADOR: Custom IDs (idêntico obitoc)
+-- ============================================================
+macro(100, function()
+    if CT.mainMacro.isOff() then return end
+    if not (CT.obstaclesQueue[1] and CT.obstaclesQueue[1].isCustom) then return end
 
+    local playerPos = pos()
+    local walkingTile = CT.obstaclesQueue[1].tile
+    local walkingTilePos = CT.obstaclesQueue[1].tilePos
+    local distance = CT.distanceFromPlayer(walkingTilePos)
 
+    if playerPos.z ~= walkingTilePos.z then
+        CT.shiftFromQueue()
+        return
+    end
 
+    -- Em cima do tile
+    if distance == 0 then
+        if CT.obstaclesQueue[1].customId.castSpell then
+            say(CT.defaultSpell)
+            return
+        end
+    -- Perto
+    elseif distance < 2 then
+        local item = findItem(CT.defaultItem)
+        if CT.obstaclesQueue[1].customId.castSpell or not item then
+            if CT.obstacleWalkTime < now then
+                CT.walkToPathDir(findPath(playerPos, walkingTilePos, 1, { ignoreCreatures = false, precision = 0, ignoreNonPathable = true }))
+                CT.obstacleWalkTime = now + 500
+            end
+        elseif item then
+            g_game.useWith(item, walkingTile)
+            CT.shiftFromQueue()
+        end
+        return
+    end
+
+    -- Longe: navega pelo path
+    local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false })
+    if path == nil or #path <= 1 then
+        if path == nil then
+            use(walkingTile:getTopUseThing())
+        end
+        return
+    end
+
+    local tileToUse = playerPos
+    for i, value in ipairs(path) do
+        if i > 5 then break end
+        tileToUse = CT.getDirection(tileToUse, value)
+    end
+    tileToUse = g_map.getTile(tileToUse)
+    if tileToUse then
+        use(tileToUse:getTopUseThing())
+    end
+end)
 
 UI.Separator()
 UI.Label("Treino Uteis")

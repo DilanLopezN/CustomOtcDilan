@@ -90,6 +90,16 @@ CT.shiftFromQueue = function()
     g_game.cancelFollow()
     CT.lastCancelFollow = now + CT.followDelay
     table.remove(CT.obstaclesQueue, 1)
+    -- Após cruzar obstáculo, re-ataca o alvo salvo
+    if CT.targetId then
+        schedule(300, function()
+            local found = getCreatureById(CT.targetId)
+            if found then
+                g_game.attack(found)
+                g_game.setChaseMode(1)
+            end
+        end)
+    end
 end
 
 -- ============================================================
@@ -223,9 +233,9 @@ CT.checkIfWentToCustomId = function(creature, newPos, oldPos, scheduleTime)
 end
 
 -- ============================================================
--- MACRO PRINCIPAL: Chase + Keep Target + Follow
+-- MACRO PRINCIPAL: Attack Follow (persegue + ataca sempre)
 -- ============================================================
-CT.mainMacro = macro(CT.followDelay, "Chase & Target", function()
+CT.mainMacro = macro(CT.followDelay, "Attack Follow", function()
     -- ESC: desliga tudo
     if modules.corelib.g_keyboard.isKeyPressed(CT.keyCancel) then
         CT.targetId = nil
@@ -237,42 +247,68 @@ CT.mainMacro = macro(CT.followDelay, "Chase & Target", function()
         return
     end
 
+    -- Se tem obstáculos na fila, deixa os processadores lidarem
+    if #CT.obstaclesQueue > 0 then return end
+
     local target = g_game.getAttackingCreature()
 
-    -- Se está atacando um player, salva o ID e ativa follow nativo
+    -- Se está atacando um player, salva o ID e persegue atacando
     if target and target:isPlayer() then
         CT.targetId = target:getId()
         g_game.setChaseMode(1)
 
-        -- Se não tem path direto, cancela follow pra não ficar preso
-        if not findPath(pos(), target:getPosition(), 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = true }) then
-            local followingPlayer = g_game.getFollowingCreature()
-            if followingPlayer and followingPlayer:getId() == target:getId() then
-                CT.lastCancelFollow = now + CT.followDelay
-                return g_game.cancelFollow()
+        local targetPos = target:getPosition()
+        local playerPos = pos()
+
+        -- Mesmo andar: garante que está atacando e se aproxima
+        if targetPos and targetPos.z == playerPos.z then
+            local dist = CT.distanceFromPlayer(targetPos)
+
+            -- Se está longe (não consegue bater), corre até o alvo
+            if dist > 1 then
+                local path = findPath(playerPos, targetPos, 50, { ignoreNonPathable = true, precision = 1, ignoreCreatures = true })
+                if path then
+                    CT.walkToPathDir(path)
+                else
+                    -- Sem path direto, tenta cancelar follow pra não ficar preso
+                    local followingPlayer = g_game.getFollowingCreature()
+                    if followingPlayer and followingPlayer:getId() == target:getId() then
+                        CT.lastCancelFollow = now + CT.followDelay
+                        g_game.cancelFollow()
+                    end
+                end
             end
-        -- Se tem path e não está seguindo, usa g_game.follow()
-        elseif not g_game.getFollowingCreature() and target:canShoot() and CT.lastCancelFollow < now then
-            g_game.follow(target)
+            -- Sempre re-ataca pra garantir que não perde o ataque
+            g_game.attack(target)
         end
         return
     end
 
-    -- Perdeu o alvo: tenta re-atacar pelo ID salvo
+    -- Perdeu o alvo: tenta re-atacar pelo ID salvo e persegue
     if CT.targetId then
         local found = getCreatureById(CT.targetId)
         if found then
             g_game.attack(found)
             g_game.setChaseMode(1)
-            if found:canShoot() and CT.lastCancelFollow < now then
-                g_game.follow(found)
+
+            local targetPos = found:getPosition()
+            local playerPos = pos()
+
+            if targetPos and targetPos.z == playerPos.z then
+                local dist = CT.distanceFromPlayer(targetPos)
+                if dist > 1 then
+                    local path = findPath(playerPos, targetPos, 50, { ignoreNonPathable = true, precision = 1, ignoreCreatures = true })
+                    if path then
+                        CT.walkToPathDir(path)
+                    end
+                end
             end
         end
-        return delay(found and 500 or 100)
+        return delay(found and 300 or 100)
     end
 end)
 CT.mainMacro.setOff()
-addIcon("ChaseTarget", {item = 14189, text = "Chase"}, CT.mainMacro)
+addIcon("ChaseTarget", {item = 14189, text = "AtkFollow"}, CT.mainMacro)
 
 -- ============================================================
 -- TRACKER: Atualiza o ID do alvo

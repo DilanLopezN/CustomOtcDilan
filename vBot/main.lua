@@ -73,6 +73,9 @@ espPanel3:setId("3")
 espPanel4 = g_ui.createWidget("espPanel")
 espPanel4:setId("4")
 
+espPanel5 = g_ui.createWidget("espPanel")
+espPanel5:setId("5")
+
 
 -- =============================================
 -- TAB: FUGAS (dinamico)
@@ -1134,6 +1137,311 @@ EspBuffMacro = macro(200, "Buffs Auto", function()
 end, buffsContent)
 
 
+-- =============================================
+-- TAB: ATAQUE % (dinamico - adicionar/remover)
+-- =============================================
+EspTabBar:addTab("Ataque %", espPanel5)
+local ataqueContent = espPanel5.scrollArea
+        UI.Separator(ataqueContent)
+        color= UI.Label("Ataques por HP% do Inimigo:",ataqueContent)
+color:setColor("#FF6600")
+        UI.Separator(ataqueContent)
+
+-- Storage: lista de ataques
+if type(storage.esp_ataque_list) ~= "table" then
+  storage.esp_ataque_list = {}
+end
+
+-- Atribui IDs unicos para cada ataque existente
+local ataqueIdCounter = 0
+for _, a in ipairs(storage.esp_ataque_list) do
+  if a.uid and a.uid >= ataqueIdCounter then
+    ataqueIdCounter = a.uid + 1
+  end
+end
+for _, a in ipairs(storage.esp_ataque_list) do
+  if not a.uid then
+    a.uid = ataqueIdCounter
+    ataqueIdCounter = ataqueIdCounter + 1
+  end
+end
+
+local ataqueCooldownEnd = {}  -- [uid] = timestamp quando CD termina
+local ataqueWidgets = {}
+
+-- Widget de cooldowns na tela
+storage.espAtkWidgetPos = storage.espAtkWidgetPos or {x = 10, y = 300}
+
+local espAtkWidget = setupUI([[
+UIWidget
+  background-color: black
+  font: verdana-11px-rounded
+  opacity: 0.70
+  padding: 5 10
+  focusable: true
+  phantom: false
+  draggable: true
+  text-auto-resize: true
+]], g_ui.getRootWidget())
+
+espAtkWidget:setPosition({x = storage.espAtkWidgetPos.x, y = storage.espAtkWidgetPos.y})
+
+espAtkWidget.onDragEnter = function(widget, mousePos)
+    widget:breakAnchors()
+    widget.movingReference = {
+        x = mousePos.x - widget:getX(),
+        y = mousePos.y - widget:getY()
+    }
+    return true
+end
+
+espAtkWidget.onDragMove = function(widget, mousePos)
+    widget:move(
+        mousePos.x - widget.movingReference.x,
+        mousePos.y - widget.movingReference.y
+    )
+    return true
+end
+
+espAtkWidget.onDragLeave = function(widget, pos)
+    storage.espAtkWidgetPos.x = widget:getX()
+    storage.espAtkWidgetPos.y = widget:getY()
+    return true
+end
+
+-- Macro para atualizar widget de cooldowns na tela
+macro(100, function()
+    local text = ""
+    for _, atk in ipairs(storage.esp_ataque_list) do
+        if atk.spell and atk.spell ~= "" then
+            local uid = atk.uid
+            local cdTime = ataqueCooldownEnd[uid] or 0
+            local remaining = math.max(0, math.ceil((cdTime - now) / 1000))
+            local name = atk.name and atk.name ~= "" and atk.name or atk.spell
+            text = text .. name .. ": " .. remaining .. "s\n"
+        end
+    end
+    if text ~= "" then
+        espAtkWidget:setText(text:sub(1, -2))
+        espAtkWidget:show()
+    else
+        espAtkWidget:hide()
+    end
+end)
+
+-- Macro principal de ataque por HP%
+EspAtaqueMacro = macro(100, "Ataque HP% Esp", function()
+    if not g_game.isAttacking() then return end
+    if isInPz() then return end
+    -- Nao ataca durante fuga ativa
+    if fugaActive then return end
+
+    local target = g_game.getAttackingCreature()
+    if not target or not target:isPlayer() then return end
+
+    local targetHp = target:getHealthPercent()
+
+    for _, atk in ipairs(storage.esp_ataque_list) do
+        if atk.spell and atk.spell ~= "" and targetHp <= (atk.hp or 100) then
+            local uid = atk.uid
+            if now >= (ataqueCooldownEnd[uid] or 0) then
+                say(atk.spell)
+                ataqueCooldownEnd[uid] = now + ((atk.cd or 2) * 1000)
+                return
+            end
+        end
+    end
+end, ataqueContent)
+
+-- Funcao para criar widget de um ataque
+local function createAtaqueWidget(index, ataqueData)
+  local uid = ataqueData.uid
+  local entry = setupUI([[
+Panel
+  height: 175
+  margin-top: 3
+
+  Label
+    id: title
+    anchors.top: parent.top
+    anchors.left: parent.left
+    color: #FF6600
+    font: verdana-11px-rounded
+    text: Ataque
+
+  Button
+    id: removeBtn
+    color: red
+    anchors.top: parent.top
+    anchors.right: parent.right
+    width: 20
+    height: 18
+    text: X
+
+  Label
+    id: lbl1
+    anchors.top: removeBtn.bottom
+    anchors.left: parent.left
+    margin-top: 3
+    text: Spell:
+    color: white
+    text-auto-resize: true
+
+  TextEdit
+    id: spellEdit
+    anchors.top: lbl1.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 22
+    margin-top: 1
+
+  Panel
+    id: row1
+    anchors.top: spellEdit.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 3
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: Nome (tela):
+      color: #AADDFF
+      text-auto-resize: true
+    TextEdit
+      id: nameEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 100
+
+  Panel
+    id: row2
+    anchors.top: row1.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 2
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: HP%:
+      color: white
+      text-auto-resize: true
+    TextEdit
+      id: hpEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 55
+
+  Panel
+    id: row3
+    anchors.top: row2.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 2
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: CD(s):
+      color: white
+      text-auto-resize: true
+    TextEdit
+      id: cdEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 55
+
+  ]], ataqueContent)
+
+  entry.title:setText("Ataque #" .. index)
+  entry.spellEdit:setText(ataqueData.spell or "")
+  entry.row1.nameEdit:setText(ataqueData.name or "")
+  entry.row2.hpEdit:setText(tostring(ataqueData.hp or 90))
+  entry.row3.cdEdit:setText(tostring(ataqueData.cd or 2))
+
+  -- Tooltips
+  entry.spellEdit:setTooltip("Nome da spell de ataque (ex: jutsu choku)")
+  entry.row1.nameEdit:setTooltip("Nome exibido no widget da tela (opcional, usa spell se vazio)")
+  entry.row2.hpEdit:setTooltip("HP% do inimigo para ativar (ex: 90 = ataca quando HP <= 90%)")
+  entry.row3.cdEdit:setTooltip("Cooldown em segundos entre usos")
+
+  -- Estilo: fundo transparente e texto neon
+  local atkInputs = {entry.spellEdit, entry.row1.nameEdit, entry.row2.hpEdit, entry.row3.cdEdit}
+  for _, input in ipairs(atkInputs) do
+    input:setBackgroundColor("#00000033")
+    input:setColor("#00DDFF")
+  end
+
+  entry.spellEdit.onTextChange = function(w, text)
+    storage.esp_ataque_list[index].spell = text
+  end
+  entry.row1.nameEdit.onTextChange = function(w, text)
+    storage.esp_ataque_list[index].name = text
+  end
+  entry.row2.hpEdit.onTextChange = function(w, text)
+    storage.esp_ataque_list[index].hp = tonumber(text) or 90
+  end
+  entry.row3.cdEdit.onTextChange = function(w, text)
+    storage.esp_ataque_list[index].cd = tonumber(text) or 2
+  end
+
+  entry.removeBtn.onClick = function(w)
+    ataqueCooldownEnd[uid] = nil
+    table.remove(storage.esp_ataque_list, index)
+    refreshAtaques()
+  end
+
+  table.insert(ataqueWidgets, entry)
+  return entry
+end
+
+-- Refresh all ataque widgets
+function refreshAtaques()
+  for _, w in ipairs(ataqueWidgets) do
+    w:destroy()
+  end
+  ataqueWidgets = {}
+  for i, ataqueData in ipairs(storage.esp_ataque_list) do
+    createAtaqueWidget(i, ataqueData)
+  end
+end
+
+-- Botao adicionar ataque
+local addAtaqueBtn = setupUI([[
+Panel
+  height: 25
+  Button
+    id: addAtaque
+    color: green
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 25
+    text: + Adicionar Ataque
+]], ataqueContent)
+
+addAtaqueBtn.addAtaque.onClick = function(w)
+  local newIndex = #storage.esp_ataque_list + 1
+  local newUid = ataqueIdCounter
+  ataqueIdCounter = ataqueIdCounter + 1
+  table.insert(storage.esp_ataque_list, {
+    spell = "ataque " .. newIndex,
+    name = "",
+    hp = 90,
+    cd = 2,
+    uid = newUid
+  })
+  refreshAtaques()
+end
+
+-- Load existing ataques on start
+refreshAtaques()
+
+
 end
 end
 
@@ -1176,19 +1484,35 @@ do
     return name:gsub("[^%w_%-]", "_")
   end
 
+  -- Deep copy via json para evitar referencias compartilhadas
+  local function deepCopy(t)
+    if type(t) ~= "table" then return t end
+    local status, encoded = pcall(json.encode, t)
+    if status and encoded then
+      local ok, decoded = pcall(json.decode, encoded)
+      if ok then return decoded end
+    end
+    return t
+  end
+
+  -- Converte chaves string numericas para chaves numericas (fix JSON decode)
+  local function fixNumericKeys(t)
+    if type(t) ~= "table" then return t end
+    local fixed = {}
+    for k, v in pairs(t) do
+      local numKey = tonumber(k)
+      if numKey then
+        fixed[numKey] = v
+      else
+        fixed[k] = v
+      end
+    end
+    return fixed
+  end
+
   -- Funcao para coletar dados do perfil atual
   local function collectProfileData()
     local data = {}
-    -- Deep copy via json para evitar referencias compartilhadas
-    local function deepCopy(t)
-      if type(t) ~= "table" then return t end
-      local status, encoded = pcall(json.encode, t)
-      if status and encoded then
-        local ok, decoded = pcall(json.decode, encoded)
-        if ok then return decoded end
-      end
-      return t
-    end
     -- Fugas
     data.esp_fugas_list = deepCopy(storage.esp_fugas_list or {})
     data.esp_fugas_widgets_show = deepCopy(storage.esp_fugas_widgets_show or {})
@@ -1199,6 +1523,8 @@ do
     data.esp_combo_list = deepCopy(storage.esp_combo_list or {})
     -- Buffs
     data.esp_buffs_list = deepCopy(storage.esp_buffs_list or {})
+    -- Ataques
+    data.esp_ataque_list = deepCopy(storage.esp_ataque_list or {})
     -- Kai
     data.esp_auto_kai = deepCopy(storage.esp_auto_kai or {})
     -- Ingame scripts
@@ -1247,16 +1573,17 @@ do
     end)
     if not status or not data then return false end
 
-    -- Aplicar dados do perfil
-    if data.esp_fugas_list then storage.esp_fugas_list = data.esp_fugas_list end
-    if data.esp_fugas_widgets_show then storage.esp_fugas_widgets_show = data.esp_fugas_widgets_show end
-    if data.esp_fugas_widgets_pos then storage.esp_fugas_widgets_pos = data.esp_fugas_widgets_pos end
-    if data.esp_trap then storage.esp_trap = data.esp_trap end
-    if data.esp_combo_list then storage.esp_combo_list = data.esp_combo_list end
-    if data.esp_buffs_list then storage.esp_buffs_list = data.esp_buffs_list end
-    if data.esp_auto_kai then storage.esp_auto_kai = data.esp_auto_kai end
+    -- Aplicar dados do perfil (deep copy + fix chaves numericas)
+    if data.esp_fugas_list then storage.esp_fugas_list = deepCopy(data.esp_fugas_list) end
+    if data.esp_fugas_widgets_show then storage.esp_fugas_widgets_show = fixNumericKeys(deepCopy(data.esp_fugas_widgets_show)) end
+    if data.esp_fugas_widgets_pos then storage.esp_fugas_widgets_pos = fixNumericKeys(deepCopy(data.esp_fugas_widgets_pos)) end
+    if data.esp_trap then storage.esp_trap = deepCopy(data.esp_trap) end
+    if data.esp_combo_list then storage.esp_combo_list = deepCopy(data.esp_combo_list) end
+    if data.esp_buffs_list then storage.esp_buffs_list = deepCopy(data.esp_buffs_list) end
+    if data.esp_ataque_list then storage.esp_ataque_list = deepCopy(data.esp_ataque_list) end
+    if data.esp_auto_kai then storage.esp_auto_kai = deepCopy(data.esp_auto_kai) end
     if data.ingame_hotkeys ~= nil then storage.ingame_hotkeys = data.ingame_hotkeys end
-    if data.bgPlayer then storage.bgPlayer = data.bgPlayer end
+    if data.bgPlayer then storage.bgPlayer = deepCopy(data.bgPlayer) end
 
     storage.perfis_current = data._originalName or charName
 
@@ -1267,12 +1594,13 @@ do
       end)
     end
 
-    -- Recarregar UI das fugas/combos/buffs/traps
+    -- Recarregar UI das fugas/combos/buffs/traps/ataques
     schedule(200, function()
       if refreshFugas then refreshFugas() end
       if refreshCombos then refreshCombos() end
       if refreshBuffs then refreshBuffs() end
       if refreshTraps then refreshTraps() end
+      if refreshAtaques then refreshAtaques() end
     end)
 
     return true
@@ -1558,6 +1886,14 @@ MainWindow
         local charName = player:getName()
         if charName and charName:len() > 0 then
           saveProfile(charName)
+          -- Recarregar UI para garantir sincronizacao
+          schedule(100, function()
+            if refreshFugas then refreshFugas() end
+            if refreshCombos then refreshCombos() end
+            if refreshBuffs then refreshBuffs() end
+            if refreshTraps then refreshTraps() end
+            if refreshAtaques then refreshAtaques() end
+          end)
           PerfisWindow.statusLabel:setText("Perfil '" .. charName .. "' salvo!")
           PerfisWindow.statusLabel:setColor("#00FF88")
           refreshProfileList()

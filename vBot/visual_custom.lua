@@ -10,14 +10,15 @@ storage.visualCustom = storage.visualCustom or {
     styleButtons = true,
     styleTabs = true,
     hideSeparators = true,
-    styleMacros = true
+    styleMacros = true,
+    transparentBotButtons = true
 }
 
 corText = storage.visualCustom.corText or "#00AAFF"
 
 local vcUI = setupUI([[
 Panel
-  height: 130
+  height: 151
 
   Label
     id: title
@@ -99,6 +100,15 @@ Panel
     text: Estilizar Macros (cor dinamica)
     height: 18
     margin-top: 3
+
+  BotSwitch
+    id: switchTransparentButtons
+    anchors.top: prev.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text: Botoes Transparentes
+    height: 18
+    margin-top: 3
 ]])
 
 vcUI.colorRow.colorInput:setText(corText)
@@ -106,6 +116,7 @@ vcUI.switchButtons:setOn(storage.visualCustom.styleButtons)
 vcUI.switchTabs:setOn(storage.visualCustom.styleTabs)
 vcUI.switchSeparators:setOn(storage.visualCustom.hideSeparators)
 vcUI.switchMacros:setOn(storage.visualCustom.styleMacros)
+vcUI.switchTransparentButtons:setOn(storage.visualCustom.transparentBotButtons)
 
 -- =============================================
 -- Apply functions
@@ -157,6 +168,53 @@ local function applySeparatorHide()
     end
 end
 
+-- Style BotSwitch buttons: transparent background, green when on, wine when off
+local function styleBotSwitch(widget)
+    widget:setImageSource("")
+    widget:setBackgroundColor("alpha")
+    if widget:isOn() then
+        widget:setColor("#00FF00")
+        widget:setBorderColor("#00FF00")
+    else
+        widget:setColor("#800020")
+        widget:setBorderColor("#800020")
+    end
+end
+
+function applyTransparentBotButtons()
+    if not storage.visualCustom.transparentBotButtons then return end
+
+    local botPanel = modules.game_bot.botWindow.contentsPanel.botPanel
+    if not botPanel then return end
+
+    local content = botPanel:recursiveGetChildById("content")
+    if not content then return end
+
+    for _, child in pairs(content:getChildren()) do
+        if child:getClassName() == "BotSwitch" or child:getClassName() == "UIBotSwitch" then
+            styleBotSwitch(child)
+            child.onMousePress = function(widget, mousePos, mouseButton)
+                macro(200, function()
+                    styleBotSwitch(widget)
+                end)
+            end
+        end
+        -- Also check nested children (panels that contain BotSwitches)
+        if child.getChildren then
+            for _, subChild in pairs(child:getChildren()) do
+                if subChild:getClassName() == "BotSwitch" or subChild:getClassName() == "UIBotSwitch" then
+                    styleBotSwitch(subChild)
+                    subChild.onMousePress = function(widget, mousePos, mouseButton)
+                        macro(200, function()
+                            styleBotSwitch(widget)
+                        end)
+                    end
+                end
+            end
+        end
+    end
+end
+
 -- Global function: style all macro BotSwitches with dynamic color
 function applyMacrosBorder()
     if not storage.visualCustom.styleMacros then return end
@@ -183,6 +241,11 @@ local function applyAllVisuals()
     schedule(200, function()
         applyTabStyle()
     end)
+    if storage.visualCustom.transparentBotButtons then
+        schedule(400, function()
+            applyTransparentBotButtons()
+        end)
+    end
 end
 
 -- =============================================
@@ -198,6 +261,11 @@ vcUI.colorRow.applyColor.onClick = function()
         if storage.visualCustom.styleMacros then
             schedule(300, function()
                 applyMacrosBorder()
+            end)
+        end
+        if storage.visualCustom.transparentBotButtons then
+            schedule(400, function()
+                applyTransparentBotButtons()
             end)
         end
     end
@@ -228,6 +296,13 @@ vcUI.switchMacros.onClick = function(widget)
     storage.visualCustom.styleMacros = widget:isOn()
     if widget:isOn() then
         schedule(300, applyMacrosBorder)
+    end
+end
+
+vcUI.switchTransparentButtons.onClick = function(widget)
+    storage.visualCustom.transparentBotButtons = widget:isOn()
+    if widget:isOn() then
+        schedule(300, applyTransparentBotButtons)
     end
 end
 

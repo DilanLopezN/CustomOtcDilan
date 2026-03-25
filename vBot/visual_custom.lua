@@ -10,15 +10,14 @@ storage.visualCustom = storage.visualCustom or {
     styleButtons = true,
     styleTabs = true,
     hideSeparators = true,
-    styleMacros = true,
-    transparentBotButtons = true
+    styleMacros = true
 }
 
 corText = storage.visualCustom.corText or "#00AAFF"
 
 local vcUI = setupUI([[
 Panel
-  height: 151
+  height: 130
 
   Label
     id: title
@@ -101,14 +100,6 @@ Panel
     height: 18
     margin-top: 3
 
-  BotSwitch
-    id: switchTransparentButtons
-    anchors.top: prev.bottom
-    anchors.left: parent.left
-    anchors.right: parent.right
-    text: Botoes Transparentes
-    height: 18
-    margin-top: 3
 ]])
 
 vcUI.colorRow.colorInput:setText(corText)
@@ -116,7 +107,6 @@ vcUI.switchButtons:setOn(storage.visualCustom.styleButtons)
 vcUI.switchTabs:setOn(storage.visualCustom.styleTabs)
 vcUI.switchSeparators:setOn(storage.visualCustom.hideSeparators)
 vcUI.switchMacros:setOn(storage.visualCustom.styleMacros)
-vcUI.switchTransparentButtons:setOn(storage.visualCustom.transparentBotButtons)
 
 -- =============================================
 -- Apply functions
@@ -207,8 +197,6 @@ local function applyTransparentRecursive(widget)
 end
 
 function applyTransparentBotButtons()
-    if not storage.visualCustom.transparentBotButtons then return end
-
     -- Style buttons in the bot panel content
     local botPanel = modules.game_bot.botWindow.contentsPanel.botPanel
     if botPanel then
@@ -225,44 +213,6 @@ function applyTransparentBotButtons()
             local className = child:getClassName()
             if className == "UIWindow" or className == "MainWindow" or className == "UIMainWindow" then
                 applyTransparentRecursive(child)
-            end
-        end
-    end
-end
-
--- Recursively revert transparent style from all buttons in a widget tree
-local function revertTransparentRecursive(widget)
-    if not widget then return end
-    local className = widget:getClassName()
-
-    if className == "BotSwitch" or className == "UIBotSwitch" then
-        widget:setStyle("BotSwitch")
-    elseif className == "UIButton" or className == "Button" then
-        widget:setStyle("Button")
-    end
-
-    if widget.getChildren then
-        for _, child in pairs(widget:getChildren()) do
-            revertTransparentRecursive(child)
-        end
-    end
-end
-
-function revertTransparentBotButtons()
-    local botPanel = modules.game_bot.botWindow.contentsPanel.botPanel
-    if botPanel then
-        local content = botPanel:recursiveGetChildById("content")
-        if content then
-            revertTransparentRecursive(content)
-        end
-    end
-
-    local rootWidget = g_ui.getRootWidget()
-    if rootWidget then
-        for _, child in pairs(rootWidget:getChildren()) do
-            local className = child:getClassName()
-            if className == "UIWindow" or className == "MainWindow" or className == "UIMainWindow" then
-                revertTransparentRecursive(child)
             end
         end
     end
@@ -294,11 +244,9 @@ local function applyAllVisuals()
     schedule(200, function()
         applyTabStyle()
     end)
-    if storage.visualCustom.transparentBotButtons then
-        schedule(400, function()
-            applyTransparentBotButtons()
-        end)
-    end
+    schedule(400, function()
+        applyTransparentBotButtons()
+    end)
 end
 
 -- =============================================
@@ -316,11 +264,9 @@ vcUI.colorRow.applyColor.onClick = function()
                 applyMacrosBorder()
             end)
         end
-        if storage.visualCustom.transparentBotButtons then
-            schedule(400, function()
-                applyTransparentBotButtons()
-            end)
-        end
+        schedule(400, function()
+            applyTransparentBotButtons()
+        end)
     end
 end
 
@@ -352,23 +298,8 @@ vcUI.switchMacros.onClick = function(widget)
     end
 end
 
-vcUI.switchTransparentButtons.onClick = function(widget)
-    storage.visualCustom.transparentBotButtons = widget:isOn()
-    if widget:isOn() then
-        schedule(300, applyTransparentBotButtons)
-    else
-        schedule(300, revertTransparentBotButtons)
-    end
-end
-
 -- Apply on load
 schedule(300, function()
     applyAllVisuals()
 end)
 
--- Recurring macro to keep transparent buttons applied (handles tab switches and late-loaded widgets)
-macro(1000, function()
-    if storage.visualCustom.transparentBotButtons then
-        applyTransparentBotButtons()
-    end
-end)

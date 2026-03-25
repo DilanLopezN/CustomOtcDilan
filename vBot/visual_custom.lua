@@ -195,11 +195,6 @@ local function applyTransparentRecursive(widget)
 
     if className == "BotSwitch" or className == "UIBotSwitch" then
         styleBotSwitch(widget)
-        widget.onMousePress = function(w, mousePos, mouseButton)
-            schedule(200, function()
-                styleBotSwitch(w)
-            end)
-        end
     elseif className == "UIButton" or className == "Button" then
         styleButton(widget)
     end
@@ -230,6 +225,44 @@ function applyTransparentBotButtons()
             local className = child:getClassName()
             if className == "UIWindow" or className == "MainWindow" or className == "UIMainWindow" then
                 applyTransparentRecursive(child)
+            end
+        end
+    end
+end
+
+-- Recursively revert transparent style from all buttons in a widget tree
+local function revertTransparentRecursive(widget)
+    if not widget then return end
+    local className = widget:getClassName()
+
+    if className == "BotSwitch" or className == "UIBotSwitch" then
+        widget:setStyle("BotSwitch")
+    elseif className == "UIButton" or className == "Button" then
+        widget:setStyle("Button")
+    end
+
+    if widget.getChildren then
+        for _, child in pairs(widget:getChildren()) do
+            revertTransparentRecursive(child)
+        end
+    end
+end
+
+function revertTransparentBotButtons()
+    local botPanel = modules.game_bot.botWindow.contentsPanel.botPanel
+    if botPanel then
+        local content = botPanel:recursiveGetChildById("content")
+        if content then
+            revertTransparentRecursive(content)
+        end
+    end
+
+    local rootWidget = g_ui.getRootWidget()
+    if rootWidget then
+        for _, child in pairs(rootWidget:getChildren()) do
+            local className = child:getClassName()
+            if className == "UIWindow" or className == "MainWindow" or className == "UIMainWindow" then
+                revertTransparentRecursive(child)
             end
         end
     end
@@ -323,6 +356,8 @@ vcUI.switchTransparentButtons.onClick = function(widget)
     storage.visualCustom.transparentBotButtons = widget:isOn()
     if widget:isOn() then
         schedule(300, applyTransparentBotButtons)
+    else
+        schedule(300, revertTransparentBotButtons)
     end
 end
 

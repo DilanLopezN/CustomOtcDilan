@@ -1,0 +1,29 @@
+CustomTabBar < TabBar
+  tab-spacing: 5
+  anchors.top: parent.top
+  anchors.left: parent.left
+  anchors.right: parent.right
+  margin-top: 10
+  margin-left: 10
+  margin-right: 10
+
+CustomTabBarPanel < TabBarPanel
+
+CustomTabBarButton < UIButton
+  size: 80 30
+  background-color: alpha
+  border-width: 0
+  text-align: center
+  text-auto-resize: true
+  image-source:
+
+  $checked:
+    background-color: alpha
+    border-width: 1
+
+  $disabled:
+    background-color: alpha
+    color: #333333
+
+  $on !checked:
+    color: #00FF00

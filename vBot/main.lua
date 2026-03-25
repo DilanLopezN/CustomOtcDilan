@@ -117,6 +117,20 @@ local fugaUsesLeft = {}      -- [uid] = usos restantes antes do CD
 local fugaWidgets = {}
 local fugaScreenWidgets = {} -- [uid] = screen widget
 
+-- Limpar widgets de fuga orfaos de execucoes anteriores
+local root = g_ui.getRootWidget()
+if root then
+  local toRemove = {}
+  for _, child in ipairs(root:getChildren()) do
+    if child:getId() and child:getId():find("^fugaScreenWidget_") then
+      table.insert(toRemove, child)
+    end
+  end
+  for _, w in ipairs(toRemove) do
+    w:destroy()
+  end
+end
+
 -- Estado de pausa para traps e combos (controlado pelas fugas)
 local trapsWereOn = false
 local combosWereOn = false
@@ -185,6 +199,7 @@ UIWidget
   -- Sempre visivel quando criado (so e criado se checkbox ativo)
   screenWidget:show()
 
+  screenWidget:setId("fugaScreenWidget_" .. uid)
   fugaScreenWidgets[uid] = screenWidget
   return screenWidget
 end
@@ -720,24 +735,40 @@ EspTrapMacro = macro(200, "Traps", function()
   end
 end, trapsContent)
 
-addTextEdit("esp_trap_1", storage.esp_trap.text1 or "trap 1", function(widget, text)
+-- Guardar referencias dos TextEdits de traps para refresh
+local trapEdits = {}
+
+trapEdits[1] = addTextEdit("esp_trap_1", storage.esp_trap.text1 or "trap 1", function(widget, text)
   storage.esp_trap.text1 = text
 end, trapsContent)
-addTextEdit("esp_trap_2", storage.esp_trap.text2 or "trap 2", function(widget, text)
+trapEdits[2] = addTextEdit("esp_trap_2", storage.esp_trap.text2 or "trap 2", function(widget, text)
   storage.esp_trap.text2 = text
 end, trapsContent)
-addTextEdit("esp_trap_3", storage.esp_trap.text3 or "trap 3", function(widget, text)
+trapEdits[3] = addTextEdit("esp_trap_3", storage.esp_trap.text3 or "trap 3", function(widget, text)
   storage.esp_trap.text3 = text
 end, trapsContent)
-addTextEdit("esp_trap_4", storage.esp_trap.text4 or "trap 4", function(widget, text)
+trapEdits[4] = addTextEdit("esp_trap_4", storage.esp_trap.text4 or "trap 4", function(widget, text)
   storage.esp_trap.text4 = text
 end, trapsContent)
-addTextEdit("esp_trap_5", storage.esp_trap.text5 or "trap 5", function(widget, text)
+trapEdits[5] = addTextEdit("esp_trap_5", storage.esp_trap.text5 or "trap 5", function(widget, text)
   storage.esp_trap.text5 = text
 end, trapsContent)
-addTextEdit("esp_trap_6", storage.esp_trap.text6 or "trap 6", function(widget, text)
+trapEdits[6] = addTextEdit("esp_trap_6", storage.esp_trap.text6 or "trap 6", function(widget, text)
   storage.esp_trap.text6 = text
 end, trapsContent)
+
+-- Funcao global para atualizar UI das traps apos carregar perfil
+function refreshTraps()
+  local ids = {"esp_trap_1", "esp_trap_2", "esp_trap_3", "esp_trap_4", "esp_trap_5", "esp_trap_6"}
+  for k, id in ipairs(ids) do
+    local key = "text" .. k
+    local val = storage.esp_trap[key] or ""
+    local w = trapsContent:recursiveGetChildById(id)
+    if w then
+      w:setText(val)
+    end
+  end
+end
 
 -- Estilo: fundo transparente e texto neon azul nos inputs de traps
 schedule(100, function()
@@ -1148,22 +1179,32 @@ do
   -- Funcao para coletar dados do perfil atual
   local function collectProfileData()
     local data = {}
+    -- Deep copy via json para evitar referencias compartilhadas
+    local function deepCopy(t)
+      if type(t) ~= "table" then return t end
+      local status, encoded = pcall(json.encode, t)
+      if status and encoded then
+        local ok, decoded = pcall(json.decode, encoded)
+        if ok then return decoded end
+      end
+      return t
+    end
     -- Fugas
-    data.esp_fugas_list = storage.esp_fugas_list or {}
-    data.esp_fugas_widgets_show = storage.esp_fugas_widgets_show or {}
-    data.esp_fugas_widgets_pos = storage.esp_fugas_widgets_pos or {}
+    data.esp_fugas_list = deepCopy(storage.esp_fugas_list or {})
+    data.esp_fugas_widgets_show = deepCopy(storage.esp_fugas_widgets_show or {})
+    data.esp_fugas_widgets_pos = deepCopy(storage.esp_fugas_widgets_pos or {})
     -- Traps
-    data.esp_trap = storage.esp_trap or {}
+    data.esp_trap = deepCopy(storage.esp_trap or {})
     -- Combos
-    data.esp_combo_list = storage.esp_combo_list or {}
+    data.esp_combo_list = deepCopy(storage.esp_combo_list or {})
     -- Buffs
-    data.esp_buffs_list = storage.esp_buffs_list or {}
+    data.esp_buffs_list = deepCopy(storage.esp_buffs_list or {})
     -- Kai
-    data.esp_auto_kai = storage.esp_auto_kai or {}
+    data.esp_auto_kai = deepCopy(storage.esp_auto_kai or {})
     -- Ingame scripts
     data.ingame_hotkeys = storage.ingame_hotkeys or ""
     -- Background
-    data.bgPlayer = storage.bgPlayer or {}
+    data.bgPlayer = deepCopy(storage.bgPlayer or {})
     return data
   end
 
@@ -1171,16 +1212,18 @@ do
   local function saveProfile(charName)
     if not charName or charName:len() == 0 then return end
     local data = collectProfileData()
-    local fileName = PERFIS_DIR .. sanitizeName(charName) .. ".json"
+    data._originalName = charName  -- salvar nome original dentro do JSON
+    local sName = sanitizeName(charName)
+    local fileName = PERFIS_DIR .. sName .. ".json"
     local status, result = pcall(function()
       return json.encode(data, 2)
     end)
     if status and result then
       g_resources.writeFileContents(fileName, result)
       storage.perfis_current = charName
-      -- Salvar na lista de perfis conhecidos
-      if not table.find(storage.perfis_data, charName) then
-        table.insert(storage.perfis_data, charName)
+      -- Salvar na lista de perfis conhecidos (usar nome sanitizado)
+      if not table.find(storage.perfis_data, sName) then
+        table.insert(storage.perfis_data, sName)
       end
     end
   end
@@ -1188,11 +1231,19 @@ do
   -- Funcao para carregar perfil de arquivo
   local function loadProfile(charName)
     if not charName or charName:len() == 0 then return false end
-    local fileName = PERFIS_DIR .. sanitizeName(charName) .. ".json"
+    local sName = sanitizeName(charName)
+    local fileName = PERFIS_DIR .. sName .. ".json"
     if not g_resources.fileExists(fileName) then return false end
 
+    local fileContent = g_resources.readFileContents(fileName)
+    if not fileContent or fileContent:len() == 0 then
+      -- Arquivo vazio/corrompido, remover
+      g_resources.deleteFile(fileName)
+      return false
+    end
+
     local status, data = pcall(function()
-      return json.decode(g_resources.readFileContents(fileName))
+      return json.decode(fileContent)
     end)
     if not status or not data then return false end
 
@@ -1207,7 +1258,7 @@ do
     if data.ingame_hotkeys ~= nil then storage.ingame_hotkeys = data.ingame_hotkeys end
     if data.bgPlayer then storage.bgPlayer = data.bgPlayer end
 
-    storage.perfis_current = charName
+    storage.perfis_current = data._originalName or charName
 
     -- Aplicar background se salvo
     if storage.bgPlayer and storage.bgPlayer.currentBG then
@@ -1216,11 +1267,12 @@ do
       end)
     end
 
-    -- Recarregar UI das fugas/combos/buffs
+    -- Recarregar UI das fugas/combos/buffs/traps
     schedule(200, function()
       if refreshFugas then refreshFugas() end
       if refreshCombos then refreshCombos() end
       if refreshBuffs then refreshBuffs() end
+      if refreshTraps then refreshTraps() end
     end)
 
     return true
@@ -1233,8 +1285,15 @@ do
       local files = g_resources.listDirectoryFiles(PERFIS_DIR, false, false)
       for _, file in ipairs(files) do
         if file:find("%.json$") then
-          local name = file:gsub("%.json$", "")
-          table.insert(profiles, name)
+          local fullPath = PERFIS_DIR .. file
+          local content = g_resources.readFileContents(fullPath)
+          if content and content:len() > 2 then
+            local name = file:gsub("%.json$", "")
+            table.insert(profiles, name)
+          else
+            -- Arquivo vazio/corrompido, remover
+            g_resources.deleteFile(fullPath)
+          end
         end
       end
     end
@@ -1242,18 +1301,22 @@ do
   end
 
   -- Funcao para deletar perfil
-  local function deleteProfile(charName)
-    if not charName or charName:len() == 0 then return end
-    local fileName = PERFIS_DIR .. sanitizeName(charName) .. ".json"
+  local function deleteProfile(sName)
+    if not sName or sName:len() == 0 then return end
+    local fileName = PERFIS_DIR .. sanitizeName(sName) .. ".json"
     if g_resources.fileExists(fileName) then
-      g_resources.writeFileContents(fileName, "")
+      g_resources.deleteFile(fileName)
     end
-    -- Remover da lista
+    -- Remover da lista (perfis_data usa nomes sanitizados)
     for i, name in ipairs(storage.perfis_data) do
-      if name == charName then
+      if name == sName then
         table.remove(storage.perfis_data, i)
         break
       end
+    end
+    -- Limpar perfis_current se era o perfil deletado
+    if storage.perfis_current and sanitizeName(storage.perfis_current) == sanitizeName(sName) then
+      storage.perfis_current = nil
     end
   end
 
@@ -1427,7 +1490,18 @@ MainWindow
 
       for _, name in ipairs(profiles) do
         local label = g_ui.createWidget("Label", PerfisWindow.profileList)
-        label:setText(name)
+        -- Ler nome original do JSON para exibir nome bonito
+        local displayName = name
+        local fullPath = PERFIS_DIR .. name .. ".json"
+        if g_resources.fileExists(fullPath) then
+          local ok, d = pcall(function()
+            return json.decode(g_resources.readFileContents(fullPath))
+          end)
+          if ok and d and d._originalName then
+            displayName = d._originalName
+          end
+        end
+        label:setText(displayName)
         label:setFont("verdana-11px-rounded")
         label:setColor("white")
         label:setHeight(18)

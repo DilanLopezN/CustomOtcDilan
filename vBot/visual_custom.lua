@@ -194,7 +194,7 @@ function applyTransparentBotButtons()
         if child:getClassName() == "BotSwitch" or child:getClassName() == "UIBotSwitch" then
             styleBotSwitch(child)
             child.onMousePress = function(widget, mousePos, mouseButton)
-                macro(200, function()
+                schedule(200, function()
                     styleBotSwitch(widget)
                 end)
             end
@@ -205,7 +205,7 @@ function applyTransparentBotButtons()
                 if subChild:getClassName() == "BotSwitch" or subChild:getClassName() == "UIBotSwitch" then
                     styleBotSwitch(subChild)
                     subChild.onMousePress = function(widget, mousePos, mouseButton)
-                        macro(200, function()
+                        schedule(200, function()
                             styleBotSwitch(widget)
                         end)
                     end
@@ -309,4 +309,11 @@ end
 -- Apply on load
 schedule(300, function()
     applyAllVisuals()
+end)
+
+-- Recurring macro to keep transparent buttons applied (handles tab switches and late-loaded widgets)
+macro(1000, function()
+    if storage.visualCustom.transparentBotButtons then
+        applyTransparentBotButtons()
+    end
 end)

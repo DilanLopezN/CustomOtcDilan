@@ -55,12 +55,20 @@ local luaFiles = {
   "macros",
   "music",
   "background",
+  "visual_custom",
   "follow"
 }
 
 for i, file in ipairs(luaFiles) do
   loadScript(file)
 end
+
+-- Apply macro styling after all scripts are loaded
+schedule(500, function()
+  if applyMacrosBorder then
+    applyMacrosBorder()
+  end
+end)
 
 setDefaultTab("Main")
 UI.Separator()

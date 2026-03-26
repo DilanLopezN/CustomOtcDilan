@@ -711,7 +711,7 @@ end, fugasContent)
 
 
 -- =============================================
--- TAB: TRAPS
+-- TAB: TRAPS (dinamico - adicionar/remover/ordenar)
 -- =============================================
 EspTabBar:addTab("Traps", espPanel2)
 local trapsContent = espPanel2.scrollArea
@@ -720,75 +720,339 @@ local trapsContent = espPanel2.scrollArea
 color:setColor("red")
         UI.Separator(trapsContent)
 
-if not storage.esp_trap then
-  storage.esp_trap = {
-    text1 = "trap 1", text2 = "trap 2", text3 = "trap 3",
-    text4 = "trap 4", text5 = "trap 5", text6 = "trap 6"
-  }
-end
-
-EspTrapMacro = macro(200, "Traps", function()
-  if g_game.isAttacking() then
-    if storage.esp_trap.text1:len() > 0 then say(storage.esp_trap.text1) end
-    if storage.esp_trap.text2:len() > 0 then say(storage.esp_trap.text2) end
-    if storage.esp_trap.text3:len() > 0 then say(storage.esp_trap.text3) end
-    if storage.esp_trap.text4:len() > 0 then say(storage.esp_trap.text4) end
-    if storage.esp_trap.text5:len() > 0 then say(storage.esp_trap.text5) end
-    if storage.esp_trap.text6:len() > 0 then say(storage.esp_trap.text6) end
-  end
-end, trapsContent)
-
--- Guardar referencias dos TextEdits de traps para refresh
-local trapEdits = {}
-
-trapEdits[1] = addTextEdit("esp_trap_1", storage.esp_trap.text1 or "trap 1", function(widget, text)
-  storage.esp_trap.text1 = text
-end, trapsContent)
-trapEdits[2] = addTextEdit("esp_trap_2", storage.esp_trap.text2 or "trap 2", function(widget, text)
-  storage.esp_trap.text2 = text
-end, trapsContent)
-trapEdits[3] = addTextEdit("esp_trap_3", storage.esp_trap.text3 or "trap 3", function(widget, text)
-  storage.esp_trap.text3 = text
-end, trapsContent)
-trapEdits[4] = addTextEdit("esp_trap_4", storage.esp_trap.text4 or "trap 4", function(widget, text)
-  storage.esp_trap.text4 = text
-end, trapsContent)
-trapEdits[5] = addTextEdit("esp_trap_5", storage.esp_trap.text5 or "trap 5", function(widget, text)
-  storage.esp_trap.text5 = text
-end, trapsContent)
-trapEdits[6] = addTextEdit("esp_trap_6", storage.esp_trap.text6 or "trap 6", function(widget, text)
-  storage.esp_trap.text6 = text
-end, trapsContent)
-
--- Funcao global para atualizar UI das traps apos carregar perfil
-function refreshTraps()
-  local ids = {"esp_trap_1", "esp_trap_2", "esp_trap_3", "esp_trap_4", "esp_trap_5", "esp_trap_6"}
-  for k, id in ipairs(ids) do
-    local key = "text" .. k
-    local val = storage.esp_trap[key] or ""
-    local w = trapsContent:recursiveGetChildById(id)
-    if w then
-      w:setText(val)
-    end
-  end
-end
-
--- Estilo: fundo transparente e texto neon azul nos inputs de traps
-schedule(100, function()
-  local function styleTextEdits(widget)
-    if not widget then return end
-    local children = widget:getChildren()
-    if not children then return end
-    for _, child in ipairs(children) do
-      if child.getClassName and child:getClassName() == "TextEdit" then
-        child:setBackgroundColor("#00000033")
-        child:setColor("#00DDFF")
+-- Storage: lista de traps (formato novo)
+if type(storage.esp_trap_list) ~= "table" then
+  -- Migrar do formato antigo se existir
+  if storage.esp_trap then
+    storage.esp_trap_list = {}
+    for k = 1, 6 do
+      local key = "text" .. k
+      if storage.esp_trap[key] and storage.esp_trap[key]:len() > 0 then
+        table.insert(storage.esp_trap_list, {
+          text = storage.esp_trap[key],
+          cooldown = 5,
+          trapTime = 3,
+          hpPercent = 100,
+          await = false
+        })
       end
-      styleTextEdits(child)
+    end
+  else
+    storage.esp_trap_list = {}
+  end
+end
+
+-- Atribui IDs unicos para cada trap existente
+local trapIdCounter = 0
+for _, t in ipairs(storage.esp_trap_list) do
+  if t.uid and t.uid >= trapIdCounter then
+    trapIdCounter = t.uid + 1
+  end
+end
+for _, t in ipairs(storage.esp_trap_list) do
+  if not t.uid then
+    t.uid = trapIdCounter
+    trapIdCounter = trapIdCounter + 1
+  end
+end
+
+local trapCooldownEnd = {}   -- [uid] = timestamp quando CD termina
+local trapActiveEnd = {}     -- [uid] = timestamp quando trap ativa termina (tempo trapado)
+local trapWidgets = {}
+
+-- Funcao para criar widget de uma trap
+local function createTrapWidget(index, trapData)
+  local uid = trapData.uid
+  local entry = setupUI([[
+Panel
+  height: 190
+  margin-top: 3
+
+  Label
+    id: title
+    anchors.top: parent.top
+    anchors.left: parent.left
+    color: #FF4444
+    font: verdana-11px-rounded
+    text: Trap
+
+  Button
+    id: upBtn
+    anchors.top: parent.top
+    anchors.right: downBtn.left
+    margin-right: 3
+    width: 20
+    height: 18
+    text: ^
+    color: #AAFFAA
+
+  Button
+    id: downBtn
+    anchors.top: parent.top
+    anchors.right: removeBtn.left
+    margin-right: 3
+    width: 20
+    height: 18
+    text: v
+    color: #AAFFAA
+
+  Button
+    id: removeBtn
+    color: red
+    anchors.top: parent.top
+    anchors.right: parent.right
+    width: 20
+    height: 18
+    text: X
+
+  Label
+    id: lbl1
+    anchors.top: removeBtn.bottom
+    anchors.left: parent.left
+    margin-top: 3
+    text: Spell:
+    color: white
+    text-auto-resize: true
+
+  TextEdit
+    id: spellEdit
+    anchors.top: lbl1.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 22
+    margin-top: 1
+
+  Panel
+    id: row1
+    anchors.top: spellEdit.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 3
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: Cooldown(s):
+      color: white
+      text-auto-resize: true
+    TextEdit
+      id: cdEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 55
+
+  Panel
+    id: row2
+    anchors.top: row1.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 2
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: Tempo Trapado(s):
+      color: white
+      text-auto-resize: true
+    TextEdit
+      id: trapTimeEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 55
+
+  Panel
+    id: row3
+    anchors.top: row2.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 2
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: % Vida Inimigo:
+      color: white
+      text-auto-resize: true
+    TextEdit
+      id: hpEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 55
+
+  Panel
+    id: row4
+    anchors.top: row3.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 2
+    CheckBox
+      id: awaitCheck
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: Await (esperar trap anterior)
+      color: #AAFFAA
+      text-auto-resize: true
+
+  ]], trapsContent)
+
+  entry.title:setText("Trap #" .. index)
+  entry.spellEdit:setText(trapData.text or "")
+  entry.row1.cdEdit:setText(tostring(trapData.cooldown or 5))
+  entry.row2.trapTimeEdit:setText(tostring(trapData.trapTime or 3))
+  entry.row3.hpEdit:setText(tostring(trapData.hpPercent or 100))
+  entry.row4.awaitCheck:setChecked(trapData.await or false)
+
+  -- Estilo: fundo transparente e texto neon azul nos inputs
+  local trapInputs = {entry.spellEdit, entry.row1.cdEdit, entry.row2.trapTimeEdit, entry.row3.hpEdit}
+  for _, input in ipairs(trapInputs) do
+    input:setBackgroundColor("#00000033")
+    input:setColor("#00DDFF")
+  end
+
+  entry.spellEdit.onTextChange = function(w, text)
+    storage.esp_trap_list[index].text = text
+  end
+  entry.row1.cdEdit.onTextChange = function(w, text)
+    storage.esp_trap_list[index].cooldown = tonumber(text) or 5
+  end
+  entry.row2.trapTimeEdit.onTextChange = function(w, text)
+    storage.esp_trap_list[index].trapTime = tonumber(text) or 3
+  end
+  entry.row3.hpEdit.onTextChange = function(w, text)
+    storage.esp_trap_list[index].hpPercent = tonumber(text) or 100
+  end
+  entry.row4.awaitCheck.onClick = function(w)
+    local checked = not w:isChecked()
+    w:setChecked(checked)
+    storage.esp_trap_list[index].await = checked
+  end
+
+  -- Botao mover para cima
+  entry.upBtn.onClick = function(w)
+    if index > 1 then
+      local tmp = storage.esp_trap_list[index]
+      storage.esp_trap_list[index] = storage.esp_trap_list[index - 1]
+      storage.esp_trap_list[index - 1] = tmp
+      refreshTraps()
     end
   end
-  styleTextEdits(trapsContent)
-end)
+
+  -- Botao mover para baixo
+  entry.downBtn.onClick = function(w)
+    if index < #storage.esp_trap_list then
+      local tmp = storage.esp_trap_list[index]
+      storage.esp_trap_list[index] = storage.esp_trap_list[index + 1]
+      storage.esp_trap_list[index + 1] = tmp
+      refreshTraps()
+    end
+  end
+
+  entry.removeBtn.onClick = function(w)
+    trapCooldownEnd[uid] = nil
+    trapActiveEnd[uid] = nil
+    table.remove(storage.esp_trap_list, index)
+    refreshTraps()
+  end
+
+  table.insert(trapWidgets, entry)
+  return entry
+end
+
+-- Refresh all trap widgets
+function refreshTraps()
+  for _, w in ipairs(trapWidgets) do
+    w:destroy()
+  end
+  trapWidgets = {}
+  for i, trapData in ipairs(storage.esp_trap_list) do
+    createTrapWidget(i, trapData)
+  end
+end
+
+-- Botao adicionar trap
+local addTrapBtn = setupUI([[
+Panel
+  height: 25
+  Button
+    id: addTrap
+    color: green
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 25
+    text: + Adicionar Trap
+]], trapsContent)
+
+addTrapBtn.addTrap.onClick = function(w)
+  local newIndex = #storage.esp_trap_list + 1
+  local newUid = trapIdCounter
+  trapIdCounter = trapIdCounter + 1
+  table.insert(storage.esp_trap_list, {
+    text = "trap " .. newIndex,
+    cooldown = 5,
+    trapTime = 3,
+    hpPercent = 100,
+    await = false,
+    uid = newUid
+  })
+  refreshTraps()
+end
+
+-- Load existing traps on start
+refreshTraps()
+
+-- Macro de traps: usa baseado em ordem, cooldown, % vida, await
+EspTrapMacro = macro(200, "Traps", function()
+  if not g_game.isAttacking() then return end
+
+  local target = g_game.getAttackingCreature()
+  if not target then return end
+
+  local targetHpPercent = target:getHealthPercent()
+
+  for i, trap in ipairs(storage.esp_trap_list) do
+    if trap.text and trap.text:len() > 0 then
+      local uid = trap.uid
+      local cooldownMs = (tonumber(trap.cooldown) or 5) * 1000
+      local trapTimeMs = (tonumber(trap.trapTime) or 3) * 1000
+      local hpThreshold = tonumber(trap.hpPercent) or 100
+      local cdEnd = trapCooldownEnd[uid] or 0
+      local activeEnd = trapActiveEnd[uid] or 0
+
+      -- Verifica se o await esta ativo: se sim, checa se a trap anterior ainda esta ativa ou em cd
+      if trap.await and i > 1 then
+        local prevTrap = storage.esp_trap_list[i - 1]
+        if prevTrap and prevTrap.uid then
+          local prevActiveEnd = trapActiveEnd[prevTrap.uid] or 0
+          local prevCdEnd = trapCooldownEnd[prevTrap.uid] or 0
+          -- So continua se a trap anterior terminou o tempo trapado E esta em cooldown
+          if now < prevActiveEnd then
+            -- Trap anterior ainda esta ativa, espera
+            break
+          end
+          if now < prevCdEnd then
+            -- Trap anterior em CD, pode usar esta se elegivel
+          end
+        end
+      end
+
+      -- Checa % vida do oponente
+      if targetHpPercent <= hpThreshold then
+        -- Checa se nao esta em cooldown e nao esta ativa
+        if now >= cdEnd and now >= activeEnd then
+          say(trap.text)
+          trapActiveEnd[uid] = now + trapTimeMs
+          trapCooldownEnd[uid] = now + trapTimeMs + cooldownMs
+          break  -- Usa uma trap por ciclo
+        end
+      end
+    end
+  end
+end, trapsContent)
 
 
 -- =============================================
@@ -1518,7 +1782,7 @@ do
     data.esp_fugas_widgets_show = deepCopy(storage.esp_fugas_widgets_show or {})
     data.esp_fugas_widgets_pos = deepCopy(storage.esp_fugas_widgets_pos or {})
     -- Traps
-    data.esp_trap = deepCopy(storage.esp_trap or {})
+    data.esp_trap_list = deepCopy(storage.esp_trap_list or {})
     -- Combos
     data.esp_combo_list = deepCopy(storage.esp_combo_list or {})
     -- Buffs
@@ -1577,7 +1841,19 @@ do
     if data.esp_fugas_list then storage.esp_fugas_list = deepCopy(data.esp_fugas_list) end
     if data.esp_fugas_widgets_show then storage.esp_fugas_widgets_show = fixNumericKeys(deepCopy(data.esp_fugas_widgets_show)) end
     if data.esp_fugas_widgets_pos then storage.esp_fugas_widgets_pos = fixNumericKeys(deepCopy(data.esp_fugas_widgets_pos)) end
-    if data.esp_trap then storage.esp_trap = deepCopy(data.esp_trap) end
+    if data.esp_trap_list then storage.esp_trap_list = deepCopy(data.esp_trap_list)
+    elseif data.esp_trap then
+      -- Migrar formato antigo do perfil
+      storage.esp_trap_list = {}
+      for k = 1, 6 do
+        local key = "text" .. k
+        if data.esp_trap[key] and data.esp_trap[key]:len() > 0 then
+          table.insert(storage.esp_trap_list, {
+            text = data.esp_trap[key], cooldown = 5, trapTime = 3, hpPercent = 100, await = false
+          })
+        end
+      end
+    end
     if data.esp_combo_list then storage.esp_combo_list = deepCopy(data.esp_combo_list) end
     if data.esp_buffs_list then storage.esp_buffs_list = deepCopy(data.esp_buffs_list) end
     if data.esp_ataque_list then storage.esp_ataque_list = deepCopy(data.esp_ataque_list) end

@@ -76,6 +76,12 @@ espPanel4:setId("4")
 espPanel5 = g_ui.createWidget("espPanel")
 espPanel5:setId("5")
 
+espPanel6 = g_ui.createWidget("espPanel")
+espPanel6:setId("6")
+
+espPanel7 = g_ui.createWidget("espPanel")
+espPanel7:setId("7")
+
 
 -- =============================================
 -- TAB: FUGAS (dinamico)
@@ -1706,6 +1712,960 @@ end
 refreshAtaques()
 
 
+-- =============================================
+-- TAB: STACK (dinamico - adicionar/remover)
+-- =============================================
+EspTabBar:addTab("Stack", espPanel6)
+local stackContent = espPanel6.scrollArea
+        UI.Separator(stackContent)
+        color= UI.Label("Stack (ataque direcional rapido):",stackContent)
+color:setColor("#FF00FF")
+        UI.Separator(stackContent)
+
+-- Storage: lista de stacks
+if type(storage.esp_stack_list) ~= "table" then
+  storage.esp_stack_list = {}
+end
+
+-- Atribui IDs unicos para cada stack existente
+local stackIdCounter = 0
+for _, s in ipairs(storage.esp_stack_list) do
+  if s.uid and s.uid >= stackIdCounter then
+    stackIdCounter = s.uid + 1
+  end
+end
+for _, s in ipairs(storage.esp_stack_list) do
+  if not s.uid then
+    s.uid = stackIdCounter
+    stackIdCounter = stackIdCounter + 1
+  end
+end
+
+local stackCooldownEnd = {}  -- [uid] = timestamp quando CD termina
+local stackWidgets = {}
+
+-- Constantes de direcao
+local DIR_NORTH = 0
+local DIR_EAST = 1
+local DIR_SOUTH = 2
+local DIR_WEST = 3
+
+local WASD_KEYS = {"W", "A", "S", "D", "E", "Z", "Q", "C"}
+local ARROW_KEYS = {"Up", "Down", "Left", "Right"}
+
+-- Mapeamento de direcoes para Stack
+local stackDirections = {
+    ["W"] = function(fromPos, toPos, further)
+        if (fromPos.y < toPos.y) then
+            local distance = math.abs(fromPos.y - toPos.y)
+            if (not further or further.distance < distance) then
+                return true, distance
+            end
+        end
+    end,
+    ["D"] = function(fromPos, toPos, further)
+        if (fromPos.x > toPos.x) then
+            local distance = math.abs(fromPos.x - toPos.x)
+            if (not further or further.distance < distance) then
+                return true, distance
+            end
+        end
+    end,
+    ["S"] = function(fromPos, toPos, further)
+        if (fromPos.y > toPos.y) then
+            local distance = math.abs(fromPos.y - toPos.y)
+            if (not further or further.distance < distance) then
+                return true, distance
+            end
+        end
+    end,
+    ["A"] = function(fromPos, toPos, further)
+        if (fromPos.x < toPos.x) then
+            local distance = math.abs(fromPos.x - toPos.x)
+            if (not further or further.distance < distance) then
+                return true, distance
+            end
+        end
+    end,
+    ["C"] = function(fromPos, toPos, further)
+        if (fromPos.x > toPos.x and fromPos.y > toPos.y) then
+            local distance = math.sqrt(math.abs(fromPos.x - toPos.x)^2 + math.abs(fromPos.y - toPos.y)^2)
+            if (not further or further.distance < distance) then
+                return true, distance
+            end
+        end
+    end,
+    ["Z"] = function(fromPos, toPos, further)
+        if (fromPos.x < toPos.x and fromPos.y > toPos.y) then
+            local distance = math.sqrt(math.abs(fromPos.x - toPos.x)^2 + math.abs(fromPos.y - toPos.y)^2)
+            if (not further or further.distance < distance) then
+                return true, distance
+            end
+        end
+    end,
+    ["Q"] = function(fromPos, toPos, further)
+        if (fromPos.x < toPos.x and fromPos.y < toPos.y) then
+            local distance = math.sqrt(math.abs(fromPos.x - toPos.x)^2 + math.abs(fromPos.y - toPos.y)^2)
+            if (not further or further.distance < distance) then
+                return true, distance
+            end
+        end
+    end,
+    ["E"] = function(fromPos, toPos, further)
+        if (fromPos.x > toPos.x and fromPos.y < toPos.y) then
+            local distance = math.sqrt(math.abs(fromPos.x - toPos.x)^2 + math.abs(fromPos.y - toPos.y)^2)
+            if (not further or further.distance < distance) then
+                return true, distance
+            end
+        end
+    end
+}
+
+-- Mapear Arrow Keys para as mesmas funcoes do WASD
+stackDirections["Up"] = stackDirections["W"]
+stackDirections["Down"] = stackDirections["S"]
+stackDirections["Left"] = stackDirections["A"]
+stackDirections["Right"] = stackDirections["D"]
+
+-- Funcao para obter spectators
+local function getStackSpectators()
+    local specs = getSpectators()
+    if (#specs == 0) then
+        local tiles = g_map.getTiles(posz())
+        for _, tile in ipairs(tiles) do
+            for _, spec in ipairs(tile:getCreatures()) do
+                table.insert(specs, spec)
+            end
+        end
+    end
+    return specs
+end
+
+-- Funcao para buscar monstro na direcao (mais distante dentro do alcance)
+local function getStackingMonster(dir, maxDistance)
+    local isInCorrectDirection = stackDirections[dir]
+    if not isInCorrectDirection then return end
+    local stack
+    local specs = getStackSpectators()
+    local playerPos = pos()
+    for _, spec in ipairs(specs) do
+        local specPos = spec:getPosition()
+        if specPos then
+            local status, distance = isInCorrectDirection(specPos, playerPos, stack)
+            if status and spec:isMonster() then
+                if getDistanceBetween(specPos, playerPos) <= maxDistance then
+                    if spec:canShoot() then
+                        stack = {spec = spec, distance = distance}
+                    end
+                end
+            end
+        end
+    end
+    return stack and stack.spec
+end
+
+-- Widget de cooldowns na tela para Stack
+storage.espStackWidgetPos = storage.espStackWidgetPos or {x = 10, y = 350}
+
+local espStackWidget = setupUI([[
+UIWidget
+  background-color: black
+  font: verdana-11px-rounded
+  opacity: 0.70
+  padding: 5 10
+  focusable: true
+  phantom: false
+  draggable: true
+  text-auto-resize: true
+]], g_ui.getRootWidget())
+
+espStackWidget:setPosition({x = storage.espStackWidgetPos.x, y = storage.espStackWidgetPos.y})
+
+espStackWidget.onDragEnter = function(widget, mousePos)
+    widget:breakAnchors()
+    widget.movingReference = {
+        x = mousePos.x - widget:getX(),
+        y = mousePos.y - widget:getY()
+    }
+    return true
+end
+
+espStackWidget.onDragMove = function(widget, mousePos)
+    widget:move(
+        mousePos.x - widget.movingReference.x,
+        mousePos.y - widget.movingReference.y
+    )
+    return true
+end
+
+espStackWidget.onDragLeave = function(widget, pos)
+    storage.espStackWidgetPos.x = widget:getX()
+    storage.espStackWidgetPos.y = widget:getY()
+    return true
+end
+
+-- Macro para atualizar widget de cooldowns Stack na tela
+macro(100, function()
+    local text = ""
+    for _, stk in ipairs(storage.esp_stack_list) do
+        if stk.spell and stk.spell ~= "" then
+            local uid = stk.uid
+            local cdTime = stackCooldownEnd[uid] or 0
+            local remaining = math.max(0, math.ceil((cdTime - now) / 1000))
+            local name = stk.name and stk.name ~= "" and stk.name or stk.spell
+            text = text .. name .. ": " .. remaining .. "s\n"
+        end
+    end
+    if text ~= "" then
+        espStackWidget:setText(text:sub(1, -2))
+        espStackWidget:show()
+    else
+        espStackWidget:hide()
+    end
+end)
+
+-- Macro principal de Stack
+EspStackMacro = macro(50, "Stack Esp", function()
+    if isInPz() then return end
+    if fugaActive then return end
+
+    for _, stk in ipairs(storage.esp_stack_list) do
+        if stk.spell and stk.spell ~= "" then
+            local uid = stk.uid
+            if now >= (stackCooldownEnd[uid] or 0) then
+                local selectedKeys = stk.key == "WASD" and WASD_KEYS or ARROW_KEYS
+                local isMousePressed = g_mouse.isPressed(3)
+                for _, dir in ipairs(selectedKeys) do
+                    if isMousePressed and modules.corelib.g_keyboard.isKeyPressed(dir) then
+                        local creature = getStackingMonster(dir, stk.distance or 5)
+                        if creature then
+                            say(stk.spell)
+                            g_game.attack(creature)
+                            schedule(50, function() g_game.attack(nil) end)
+                            schedule(200, function()
+                                g_game.cancelAttack()
+                            end)
+                            stackCooldownEnd[uid] = now + ((stk.cd or 2) * 1000)
+                            return
+                        end
+                    end
+                end
+            end
+        end
+    end
+end, stackContent)
+
+-- Funcao para criar widget de um Stack
+local function createStackWidget(index, stackData)
+  local uid = stackData.uid
+  local entry = setupUI([[
+Panel
+  height: 210
+  margin-top: 3
+
+  Label
+    id: title
+    anchors.top: parent.top
+    anchors.left: parent.left
+    color: #FF00FF
+    font: verdana-11px-rounded
+    text: Stack
+
+  Button
+    id: removeBtn
+    color: red
+    anchors.top: parent.top
+    anchors.right: parent.right
+    width: 20
+    height: 18
+    text: X
+
+  Label
+    id: lbl1
+    anchors.top: removeBtn.bottom
+    anchors.left: parent.left
+    margin-top: 3
+    text: Spell:
+    color: white
+    text-auto-resize: true
+
+  TextEdit
+    id: spellEdit
+    anchors.top: lbl1.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 22
+    margin-top: 1
+
+  Panel
+    id: row1
+    anchors.top: spellEdit.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 3
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: Nome (tela):
+      color: #AADDFF
+      text-auto-resize: true
+    TextEdit
+      id: nameEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 100
+
+  Panel
+    id: row2
+    anchors.top: row1.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 2
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: Teclas:
+      color: white
+      text-auto-resize: true
+    ComboBox
+      id: keyCombo
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 100
+
+  Panel
+    id: row3
+    anchors.top: row2.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 2
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: Distancia:
+      color: white
+      text-auto-resize: true
+    TextEdit
+      id: distEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 55
+
+  Panel
+    id: row4
+    anchors.top: row3.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 2
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: CD(s):
+      color: white
+      text-auto-resize: true
+    TextEdit
+      id: cdEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 55
+
+  ]], stackContent)
+
+  entry.title:setText("Stack #" .. index)
+  entry.spellEdit:setText(stackData.spell or "")
+  entry.row1.nameEdit:setText(stackData.name or "")
+  entry.row3.distEdit:setText(tostring(stackData.distance or 5))
+  entry.row4.cdEdit:setText(tostring(stackData.cd or 2))
+
+  -- ComboBox de teclas
+  entry.row2.keyCombo:addOption("WASD")
+  entry.row2.keyCombo:addOption("Arrows")
+  entry.row2.keyCombo:setCurrentOption(stackData.key or "WASD")
+
+  -- Tooltips
+  entry.spellEdit:setTooltip("Spell de ataque (ex: exori vis)")
+  entry.row1.nameEdit:setTooltip("Nome exibido no widget da tela (opcional)")
+  entry.row2.keyCombo:setTooltip("WASD + EQZC (diagonais) ou Arrow Keys")
+  entry.row3.distEdit:setTooltip("Distancia maxima para atacar (1-10)")
+  entry.row4.cdEdit:setTooltip("Cooldown em segundos entre usos")
+
+  -- Estilo neon
+  local stkInputs = {entry.spellEdit, entry.row1.nameEdit, entry.row3.distEdit, entry.row4.cdEdit}
+  for _, input in ipairs(stkInputs) do
+    input:setBackgroundColor("#00000033")
+    input:setColor("#00DDFF")
+  end
+
+  entry.spellEdit.onTextChange = function(w, text)
+    storage.esp_stack_list[index].spell = text
+  end
+  entry.row1.nameEdit.onTextChange = function(w, text)
+    storage.esp_stack_list[index].name = text
+  end
+  entry.row2.keyCombo.onOptionChange = function(w, text)
+    storage.esp_stack_list[index].key = text
+  end
+  entry.row3.distEdit.onTextChange = function(w, text)
+    storage.esp_stack_list[index].distance = tonumber(text) or 5
+  end
+  entry.row4.cdEdit.onTextChange = function(w, text)
+    storage.esp_stack_list[index].cd = tonumber(text) or 2
+  end
+
+  entry.removeBtn.onClick = function(w)
+    stackCooldownEnd[uid] = nil
+    table.remove(storage.esp_stack_list, index)
+    refreshStacks()
+  end
+
+  table.insert(stackWidgets, entry)
+  return entry
+end
+
+-- Refresh all stack widgets
+function refreshStacks()
+  for _, w in ipairs(stackWidgets) do
+    w:destroy()
+  end
+  stackWidgets = {}
+  for i, stackData in ipairs(storage.esp_stack_list) do
+    createStackWidget(i, stackData)
+  end
+end
+
+-- Botao adicionar stack
+local addStackBtn = setupUI([[
+Panel
+  height: 25
+  Button
+    id: addStack
+    color: green
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 25
+    text: + Adicionar Stack
+]], stackContent)
+
+addStackBtn.addStack.onClick = function(w)
+  local newIndex = #storage.esp_stack_list + 1
+  local newUid = stackIdCounter
+  stackIdCounter = stackIdCounter + 1
+  table.insert(storage.esp_stack_list, {
+    spell = "stack " .. newIndex,
+    name = "",
+    key = "WASD",
+    distance = 5,
+    cd = 2,
+    uid = newUid
+  })
+  refreshStacks()
+end
+
+-- Load existing stacks on start
+refreshStacks()
+
+
+-- =============================================
+-- TAB: RETAS (dinamico - adicionar/remover)
+-- =============================================
+EspTabBar:addTab("Retas", espPanel7)
+local retasContent = espPanel7.scrollArea
+        UI.Separator(retasContent)
+        color= UI.Label("Retas (alinhar e atacar em reta):",retasContent)
+color:setColor("#00FF88")
+        UI.Separator(retasContent)
+
+-- Storage: lista de retas
+if type(storage.esp_retas_list) ~= "table" then
+  storage.esp_retas_list = {}
+end
+
+-- Atribui IDs unicos para cada reta existente
+local retasIdCounter = 0
+for _, r in ipairs(storage.esp_retas_list) do
+  if r.uid and r.uid >= retasIdCounter then
+    retasIdCounter = r.uid + 1
+  end
+end
+for _, r in ipairs(storage.esp_retas_list) do
+  if not r.uid then
+    r.uid = retasIdCounter
+    retasIdCounter = retasIdCounter + 1
+  end
+end
+
+local retasCooldownEnd = {}  -- [uid] = timestamp quando CD termina
+local retasDelayEnd = 0      -- delay global para autowalk
+local retasWidgets = {}
+
+-- Funcoes auxiliares para Retas
+local function correctDirection()
+    local dir = player:getDirection()
+    return dir <= 3 and dir or dir < 6 and 1 or 3
+end
+
+local function getLowestBetween(p1, p2)
+    local distx = math.abs(p1.x - p2.x)
+    local disty = math.abs(p1.y - p2.y)
+    return math.min(distx, disty)
+end
+
+local function preciseDistance(p1, p2)
+    local distx = math.abs(p1.x - p2.x)
+    local disty = math.abs(p1.y - p2.y)
+    return math.sqrt(distx * distx + disty * disty)
+end
+
+local retasDirections = {
+    {x = 0, y = -1},  -- Norte
+    {x = 1, y = 0},   -- Leste
+    {x = 0, y = 1},   -- Sul
+    {x = -1, y = 0}   -- Oeste
+}
+
+-- Funcao para obter a criatura sendo atacada no battlePanel
+local ATTACKING_COLORS = {"#FF0000", "#ff0000", "red"}
+local function getAttackingCreature()
+    local battlePanel = g_ui.getRootWidget():recursiveGetChildById('battlePanel')
+    if not battlePanel then return g_game.getAttackingCreature() end
+    local playerPos = pos()
+    for _, child in ipairs(battlePanel:getChildren()) do
+        local creature = child.creature
+        if creature then
+            local creaturePos = creature:getPosition()
+            if creaturePos and creaturePos.z == playerPos.z then
+                if child.color and table.find(ATTACKING_COLORS, child.color) then
+                    return creature
+                end
+            end
+        end
+    end
+    return g_game.getAttackingCreature()
+end
+
+-- Funcao para calcular posicao de uso (tile adjacente)
+local function getUsePosition(targetPos)
+    local playerPos = player:getPosition()
+    local tPos = {x = targetPos.x, y = targetPos.y, z = targetPos.z}
+    local distance = {
+        x = math.abs(playerPos.x - tPos.x),
+        y = math.abs(playerPos.y - tPos.y)
+    }
+    if distance.y >= distance.x then
+        if tPos.y > playerPos.y or
+           (tPos.y < playerPos.y and tPos.x < playerPos.x) or
+           (tPos.y < playerPos.y and tPos.x > playerPos.x) then
+            tPos.x = tPos.x + 1
+        elseif tPos.x > playerPos.x or
+               (tPos.x < playerPos.x and tPos.y > playerPos.y) or
+               (tPos.x > playerPos.y and tPos.x < playerPos.x) then
+            tPos.x = tPos.x - 1
+        end
+    else
+        if tPos.x < playerPos.x or
+           tPos.y > playerPos.y or
+           (tPos.x > playerPos.x and tPos.y > playerPos.y) then
+            tPos.y = tPos.y + 1
+        elseif tPos.y < playerPos.y or
+               (tPos.y > playerPos.y and tPos.x > playerPos.x) or
+               (tPos.x < playerPos.x and tPos.y < playerPos.y) then
+            tPos.y = tPos.y - 1
+        end
+    end
+    return tPos
+end
+
+-- Funcao canUseReta - verifica se pode usar reta no alvo
+local function canUseReta(creature)
+    local creaturePos = creature:getPosition()
+    if not creaturePos then return end
+
+    local playerPos = pos()
+    local distance = getDistanceBetween(playerPos, creaturePos)
+    local lowest = getLowestBetween(playerPos, creaturePos)
+
+    -- Cenario 1: Em linha reta, dist 1-4
+    if distance > 0 and distance <= 4 and lowest == 0 then
+        local direction = correctDirection()
+        if playerPos.x > creaturePos.x then
+            turn(DIR_WEST)
+            return direction == DIR_WEST
+        elseif playerPos.x < creaturePos.x then
+            turn(DIR_EAST)
+            return direction == DIR_EAST
+        elseif playerPos.y > creaturePos.y then
+            turn(DIR_NORTH)
+            return direction == DIR_NORTH
+        elseif playerPos.y < creaturePos.y then
+            turn(DIR_SOUTH)
+            return direction == DIR_SOUTH
+        end
+
+    -- Cenario 2: Muito perto mas nao em linha reta (diagonal)
+    elseif distance <= 1 then
+        if lowest ~= 0 or distance == 0 then
+            local closestPos
+            for _, dir in ipairs(retasDirections) do
+                local adjPos = {
+                    x = creaturePos.x + dir.x,
+                    y = creaturePos.y + dir.y,
+                    z = creaturePos.z
+                }
+                if not closestPos or
+                   preciseDistance(adjPos, playerPos) < preciseDistance(closestPos, playerPos) then
+                    local tile = g_map.getTile(adjPos)
+                    if tile and tile:isWalkable() and tile:isPathable() then
+                        closestPos = adjPos
+                    end
+                end
+            end
+            if closestPos then
+                player:autoWalk(closestPos)
+                retasDelayEnd = now + 300
+                return
+            end
+        end
+
+    -- Cenario 3: Longe demais, usa tile adjacente
+    else
+        local usePos = getUsePosition(creaturePos)
+        if not usePos then return end
+        local tile = g_map.getTile(usePos)
+        if not tile then return end
+        g_game.use(tile:getTopThing())
+    end
+end
+
+-- Widget de cooldowns na tela para Retas
+storage.espRetasWidgetPos = storage.espRetasWidgetPos or {x = 10, y = 400}
+
+local espRetasWidget = setupUI([[
+UIWidget
+  background-color: black
+  font: verdana-11px-rounded
+  opacity: 0.70
+  padding: 5 10
+  focusable: true
+  phantom: false
+  draggable: true
+  text-auto-resize: true
+]], g_ui.getRootWidget())
+
+espRetasWidget:setPosition({x = storage.espRetasWidgetPos.x, y = storage.espRetasWidgetPos.y})
+
+espRetasWidget.onDragEnter = function(widget, mousePos)
+    widget:breakAnchors()
+    widget.movingReference = {
+        x = mousePos.x - widget:getX(),
+        y = mousePos.y - widget:getY()
+    }
+    return true
+end
+
+espRetasWidget.onDragMove = function(widget, mousePos)
+    widget:move(
+        mousePos.x - widget.movingReference.x,
+        mousePos.y - widget.movingReference.y
+    )
+    return true
+end
+
+espRetasWidget.onDragLeave = function(widget, pos)
+    storage.espRetasWidgetPos.x = widget:getX()
+    storage.espRetasWidgetPos.y = widget:getY()
+    return true
+end
+
+-- Macro para atualizar widget de cooldowns Retas na tela
+macro(100, function()
+    local text = ""
+    for _, ret in ipairs(storage.esp_retas_list) do
+        if ret.spell and ret.spell ~= "" then
+            local uid = ret.uid
+            local cdTime = retasCooldownEnd[uid] or 0
+            local remaining = math.max(0, math.ceil((cdTime - now) / 1000))
+            local name = ret.name and ret.name ~= "" and ret.name or ret.spell
+            text = text .. name .. ": " .. remaining .. "s\n"
+        end
+    end
+    if text ~= "" then
+        espRetasWidget:setText(text:sub(1, -2))
+        espRetasWidget:show()
+    else
+        espRetasWidget:hide()
+    end
+end)
+
+-- Macro principal de Retas
+EspRetasMacro = macro(100, "Retas Esp", function()
+    if isInPz() then return end
+    if fugaActive then return end
+    if retasDelayEnd >= now then return end
+
+    local target = getAttackingCreature()
+    if not target then return end
+
+    for _, ret in ipairs(storage.esp_retas_list) do
+        if ret.spell and ret.spell ~= "" then
+            local uid = ret.uid
+            if now >= (retasCooldownEnd[uid] or 0) then
+                local shouldActivate = false
+                if ret.key == "AUTO" then
+                    shouldActivate = true
+                else
+                    shouldActivate = modules.corelib.g_keyboard.isKeyPressed(ret.key)
+                end
+                if shouldActivate then
+                    if canUseReta(target) then
+                        say(ret.spell)
+                        retasCooldownEnd[uid] = now + ((ret.cd or 2) * 1000)
+                        return
+                    end
+                end
+            end
+        end
+    end
+end, retasContent)
+
+-- Funcao para criar widget de uma Reta
+local function createRetaWidget(index, retaData)
+  local uid = retaData.uid
+  local entry = setupUI([[
+Panel
+  height: 210
+  margin-top: 3
+
+  Label
+    id: title
+    anchors.top: parent.top
+    anchors.left: parent.left
+    color: #00FF88
+    font: verdana-11px-rounded
+    text: Reta
+
+  Button
+    id: removeBtn
+    color: red
+    anchors.top: parent.top
+    anchors.right: parent.right
+    width: 20
+    height: 18
+    text: X
+
+  Label
+    id: lbl1
+    anchors.top: removeBtn.bottom
+    anchors.left: parent.left
+    margin-top: 3
+    text: Spell:
+    color: white
+    text-auto-resize: true
+
+  TextEdit
+    id: spellEdit
+    anchors.top: lbl1.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 22
+    margin-top: 1
+
+  Panel
+    id: row1
+    anchors.top: spellEdit.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 3
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: Nome (tela):
+      color: #AADDFF
+      text-auto-resize: true
+    TextEdit
+      id: nameEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 100
+
+  Panel
+    id: row2
+    anchors.top: row1.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 2
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: Tecla:
+      color: white
+      text-auto-resize: true
+    ComboBox
+      id: keyCombo
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 100
+
+  Panel
+    id: row3
+    anchors.top: row2.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 2
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: Distancia:
+      color: white
+      text-auto-resize: true
+    TextEdit
+      id: distEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 55
+
+  Panel
+    id: row4
+    anchors.top: row3.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 2
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: CD(s):
+      color: white
+      text-auto-resize: true
+    TextEdit
+      id: cdEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 55
+
+  ]], retasContent)
+
+  entry.title:setText("Reta #" .. index)
+  entry.spellEdit:setText(retaData.spell or "")
+  entry.row1.nameEdit:setText(retaData.name or "")
+  entry.row3.distEdit:setText(tostring(retaData.distance or 4))
+  entry.row4.cdEdit:setText(tostring(retaData.cd or 2))
+
+  -- ComboBox de teclas para Reta
+  entry.row2.keyCombo:addOption("AUTO")
+  entry.row2.keyCombo:addOption("F1")
+  entry.row2.keyCombo:addOption("F2")
+  entry.row2.keyCombo:addOption("F3")
+  entry.row2.keyCombo:addOption("F4")
+  entry.row2.keyCombo:addOption("F5")
+  entry.row2.keyCombo:addOption("F6")
+  entry.row2.keyCombo:addOption("F7")
+  entry.row2.keyCombo:addOption("F8")
+  entry.row2.keyCombo:addOption("F9")
+  entry.row2.keyCombo:addOption("F10")
+  entry.row2.keyCombo:addOption("F11")
+  entry.row2.keyCombo:addOption("F12")
+  entry.row2.keyCombo:setCurrentOption(retaData.key or "AUTO")
+
+  -- Tooltips
+  entry.spellEdit:setTooltip("Spell de ataque em reta (ex: exori gran)")
+  entry.row1.nameEdit:setTooltip("Nome exibido no widget da tela (opcional)")
+  entry.row2.keyCombo:setTooltip("AUTO = sempre ativo, ou tecla para ativar")
+  entry.row3.distEdit:setTooltip("Distancia maxima para reta (1-10)")
+  entry.row4.cdEdit:setTooltip("Cooldown em segundos entre usos")
+
+  -- Estilo neon
+  local retInputs = {entry.spellEdit, entry.row1.nameEdit, entry.row3.distEdit, entry.row4.cdEdit}
+  for _, input in ipairs(retInputs) do
+    input:setBackgroundColor("#00000033")
+    input:setColor("#00DDFF")
+  end
+
+  entry.spellEdit.onTextChange = function(w, text)
+    storage.esp_retas_list[index].spell = text
+  end
+  entry.row1.nameEdit.onTextChange = function(w, text)
+    storage.esp_retas_list[index].name = text
+  end
+  entry.row2.keyCombo.onOptionChange = function(w, text)
+    storage.esp_retas_list[index].key = text
+  end
+  entry.row3.distEdit.onTextChange = function(w, text)
+    storage.esp_retas_list[index].distance = tonumber(text) or 4
+  end
+  entry.row4.cdEdit.onTextChange = function(w, text)
+    storage.esp_retas_list[index].cd = tonumber(text) or 2
+  end
+
+  entry.removeBtn.onClick = function(w)
+    retasCooldownEnd[uid] = nil
+    table.remove(storage.esp_retas_list, index)
+    refreshRetas()
+  end
+
+  table.insert(retasWidgets, entry)
+  return entry
+end
+
+-- Refresh all retas widgets
+function refreshRetas()
+  for _, w in ipairs(retasWidgets) do
+    w:destroy()
+  end
+  retasWidgets = {}
+  for i, retaData in ipairs(storage.esp_retas_list) do
+    createRetaWidget(i, retaData)
+  end
+end
+
+-- Botao adicionar reta
+local addRetaBtn = setupUI([[
+Panel
+  height: 25
+  Button
+    id: addReta
+    color: green
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 25
+    text: + Adicionar Reta
+]], retasContent)
+
+addRetaBtn.addReta.onClick = function(w)
+  local newIndex = #storage.esp_retas_list + 1
+  local newUid = retasIdCounter
+  retasIdCounter = retasIdCounter + 1
+  table.insert(storage.esp_retas_list, {
+    spell = "reta " .. newIndex,
+    name = "",
+    key = "AUTO",
+    distance = 4,
+    cd = 2,
+    uid = newUid
+  })
+  refreshRetas()
+end
+
+-- Load existing retas on start
+refreshRetas()
+
+
 end
 end
 
@@ -1789,6 +2749,10 @@ do
     data.esp_buffs_list = deepCopy(storage.esp_buffs_list or {})
     -- Ataques
     data.esp_ataque_list = deepCopy(storage.esp_ataque_list or {})
+    -- Stack
+    data.esp_stack_list = deepCopy(storage.esp_stack_list or {})
+    -- Retas
+    data.esp_retas_list = deepCopy(storage.esp_retas_list or {})
     -- Kai
     data.esp_auto_kai = deepCopy(storage.esp_auto_kai or {})
     -- Ingame scripts
@@ -1857,6 +2821,8 @@ do
     if data.esp_combo_list then storage.esp_combo_list = deepCopy(data.esp_combo_list) end
     if data.esp_buffs_list then storage.esp_buffs_list = deepCopy(data.esp_buffs_list) end
     if data.esp_ataque_list then storage.esp_ataque_list = deepCopy(data.esp_ataque_list) end
+    if data.esp_stack_list then storage.esp_stack_list = deepCopy(data.esp_stack_list) end
+    if data.esp_retas_list then storage.esp_retas_list = deepCopy(data.esp_retas_list) end
     if data.esp_auto_kai then storage.esp_auto_kai = deepCopy(data.esp_auto_kai) end
     if data.ingame_hotkeys ~= nil then storage.ingame_hotkeys = data.ingame_hotkeys end
     if data.bgPlayer then storage.bgPlayer = deepCopy(data.bgPlayer) end
@@ -1877,6 +2843,8 @@ do
       if refreshBuffs then refreshBuffs() end
       if refreshTraps then refreshTraps() end
       if refreshAtaques then refreshAtaques() end
+      if refreshStacks then refreshStacks() end
+      if refreshRetas then refreshRetas() end
     end)
 
     return true
@@ -2169,6 +3137,8 @@ MainWindow
             if refreshBuffs then refreshBuffs() end
             if refreshTraps then refreshTraps() end
             if refreshAtaques then refreshAtaques() end
+            if refreshStacks then refreshStacks() end
+            if refreshRetas then refreshRetas() end
           end)
           PerfisWindow.statusLabel:setText("Perfil '" .. charName .. "' salvo!")
           PerfisWindow.statusLabel:setColor("#00FF88")

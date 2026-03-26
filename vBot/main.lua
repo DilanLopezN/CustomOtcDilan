@@ -1714,11 +1714,13 @@ refreshAtaques()
 
 -- =============================================
 -- TAB: STACK (dinamico - adicionar/remover)
+-- Novo sistema: Botao direito do mouse + tecla direcional
+-- Suporta WASD (8 direcoes) e Arrows (4 direcoes)
 -- =============================================
 EspTabBar:addTab("Stack", espPanel6)
 local stackContent = espPanel6.scrollArea
         UI.Separator(stackContent)
-        color= UI.Label("Stack (ataque direcional rapido):",stackContent)
+        color= UI.Label("Stack (botao direito + direcional):",stackContent)
 color:setColor("#FF00FF")
         UI.Separator(stackContent)
 
@@ -1744,24 +1746,30 @@ end
 local stackCooldownEnd = {}  -- [uid] = timestamp quando CD termina
 local stackWidgets = {}
 
--- Constantes de direcao
-local DIR_NORTH = 0
-local DIR_EAST = 1
-local DIR_SOUTH = 2
-local DIR_WEST = 3
+-- Teclas por modo
+local WASD_KEYS  = {"W", "A", "S", "D", "E", "Z", "Q", "C"}
+local ARROW_KEYS = {"Up", "Down", "Left", "Right"}
 
--- Todas as teclas disponiveis para selecao dinamica
-local ALL_STACK_KEYS = {
-    "W", "A", "S", "D", "E", "Z", "Q", "C",
-    "Up", "Down", "Left", "Right",
-    "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
-    "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
-    "Numpad1", "Numpad2", "Numpad3", "Numpad4", "Numpad5", "Numpad6", "Numpad7", "Numpad8", "Numpad9"
+-- Mapeamento Arrow Keys -> funcoes equivalentes ao WASD
+local ASSERT_DIR_KEYS = {
+    ["Up"]    = "W",
+    ["Down"]  = "S",
+    ["Left"]  = "A",
+    ["Right"] = "D"
 }
 
--- Mapeamento de direcoes para Stack (por direcao cardinal/diagonal)
-local stackDirFunctions = {
-    ["North"] = function(fromPos, toPos, further)
+-- Distancia euclidiana (para diagonais)
+local function stackPreciseDistance(p1, p2)
+    local distx = math.abs(p1.x - p2.x)
+    local disty = math.abs(p1.y - p2.y)
+    return math.sqrt(distx * distx + disty * disty)
+end
+
+-- Mapa de direcoes: cada funcao recebe (pos_monstro, pos_player, melhor_ate_agora)
+-- Retorna (true, distancia) se o monstro esta na direcao correta E eh mais distante
+local stackDirections = {
+    -- W = Norte: monstro acima do player (monstro.y < player.y)
+    ["W"] = function(fromPos, toPos, further)
         if (fromPos.y < toPos.y) then
             local distance = math.abs(fromPos.y - toPos.y)
             if (not further or further.distance < distance) then
@@ -1769,7 +1777,8 @@ local stackDirFunctions = {
             end
         end
     end,
-    ["East"] = function(fromPos, toPos, further)
+    -- D = Leste: monstro a direita do player (monstro.x > player.x)
+    ["D"] = function(fromPos, toPos, further)
         if (fromPos.x > toPos.x) then
             local distance = math.abs(fromPos.x - toPos.x)
             if (not further or further.distance < distance) then
@@ -1777,7 +1786,8 @@ local stackDirFunctions = {
             end
         end
     end,
-    ["South"] = function(fromPos, toPos, further)
+    -- S = Sul: monstro abaixo do player (monstro.y > player.y)
+    ["S"] = function(fromPos, toPos, further)
         if (fromPos.y > toPos.y) then
             local distance = math.abs(fromPos.y - toPos.y)
             if (not further or further.distance < distance) then
@@ -1785,7 +1795,8 @@ local stackDirFunctions = {
             end
         end
     end,
-    ["West"] = function(fromPos, toPos, further)
+    -- A = Oeste: monstro a esquerda do player (monstro.x < player.x)
+    ["A"] = function(fromPos, toPos, further)
         if (fromPos.x < toPos.x) then
             local distance = math.abs(fromPos.x - toPos.x)
             if (not further or further.distance < distance) then
@@ -1793,33 +1804,37 @@ local stackDirFunctions = {
             end
         end
     end,
-    ["NE"] = function(fromPos, toPos, further)
-        if (fromPos.x > toPos.x and fromPos.y < toPos.y) then
-            local distance = math.sqrt(math.abs(fromPos.x - toPos.x)^2 + math.abs(fromPos.y - toPos.y)^2)
-            if (not further or further.distance < distance) then
-                return true, distance
-            end
-        end
-    end,
-    ["NW"] = function(fromPos, toPos, further)
-        if (fromPos.x < toPos.x and fromPos.y < toPos.y) then
-            local distance = math.sqrt(math.abs(fromPos.x - toPos.x)^2 + math.abs(fromPos.y - toPos.y)^2)
-            if (not further or further.distance < distance) then
-                return true, distance
-            end
-        end
-    end,
-    ["SE"] = function(fromPos, toPos, further)
+    -- C = Diagonal Sudoeste: monstro.x > player.x E monstro.y > player.y
+    ["C"] = function(fromPos, toPos, further)
         if (fromPos.x > toPos.x and fromPos.y > toPos.y) then
-            local distance = math.sqrt(math.abs(fromPos.x - toPos.x)^2 + math.abs(fromPos.y - toPos.y)^2)
+            local distance = stackPreciseDistance(fromPos, toPos)
             if (not further or further.distance < distance) then
                 return true, distance
             end
         end
     end,
-    ["SW"] = function(fromPos, toPos, further)
+    -- Z = Diagonal Sudeste: monstro.x < player.x E monstro.y > player.y
+    ["Z"] = function(fromPos, toPos, further)
         if (fromPos.x < toPos.x and fromPos.y > toPos.y) then
-            local distance = math.sqrt(math.abs(fromPos.x - toPos.x)^2 + math.abs(fromPos.y - toPos.y)^2)
+            local distance = stackPreciseDistance(fromPos, toPos)
+            if (not further or further.distance < distance) then
+                return true, distance
+            end
+        end
+    end,
+    -- Q = Diagonal Nordeste: monstro.x < player.x E monstro.y < player.y
+    ["Q"] = function(fromPos, toPos, further)
+        if (fromPos.x < toPos.x and fromPos.y < toPos.y) then
+            local distance = stackPreciseDistance(fromPos, toPos)
+            if (not further or further.distance < distance) then
+                return true, distance
+            end
+        end
+    end,
+    -- E = Diagonal Noroeste: monstro.x > player.x E monstro.y < player.y
+    ["E"] = function(fromPos, toPos, further)
+        if (fromPos.x > toPos.x and fromPos.y < toPos.y) then
+            local distance = stackPreciseDistance(fromPos, toPos)
             if (not further or further.distance < distance) then
                 return true, distance
             end
@@ -1827,9 +1842,14 @@ local stackDirFunctions = {
     end
 }
 
--- Funcao para obter spectators
-local function getStackSpectators()
-    local specs = getSpectators()
+-- Mapeia Arrow Keys para as mesmas funcoes do WASD
+for arrowKey, wasdKey in pairs(ASSERT_DIR_KEYS) do
+    stackDirections[arrowKey] = stackDirections[wasdKey]
+end
+
+-- Funcao para obter spectators (com fallback)
+local function getStackSpecs(multifloor)
+    local specs = getSpectators(multifloor)
     if (#specs == 0) then
         local tiles = g_map.getTiles(posz())
         for _, tile in ipairs(tiles) do
@@ -1841,48 +1861,30 @@ local function getStackSpectators()
     return specs
 end
 
--- Funcao para buscar monstro na direcao (mais distante dentro do alcance)
-local function getStackingMonster(direction, maxDistance)
-    local isInCorrectDirection = stackDirFunctions[direction]
-    if not isInCorrectDirection then return end
+-- Busca o MONSTRO MAIS DISTANTE na direcao especificada, dentro do alcance
+local function getStackingMonster(dir, maxDistance)
+    local isInCorrectDirection = stackDirections[dir]
+    if (not isInCorrectDirection) then return end
+
     local stack
-    local specs = getStackSpectators()
+    local specs = getStackSpecs()
     local playerPos = pos()
+
     for _, spec in ipairs(specs) do
         local specPos = spec:getPosition()
         if specPos then
             local status, distance = isInCorrectDirection(specPos, playerPos, stack)
-            if status and spec:isMonster() then
-                if getDistanceBetween(specPos, playerPos) <= maxDistance then
-                    if spec:canShoot() then
+            if (status and spec:isMonster()) then
+                if (getDistanceBetween(specPos, playerPos) <= maxDistance) then
+                    if (spec:canShoot()) then
                         stack = {spec = spec, distance = distance}
                     end
                 end
             end
         end
     end
-    return stack and stack.spec
-end
 
--- Buscar monstro mais proximo em qualquer direcao (para modo AUTO)
-local function getStackingMonsterAuto(maxDistance)
-    local specs = getStackSpectators()
-    local playerPos = pos()
-    local closest = nil
-    local closestDist = 999
-    for _, spec in ipairs(specs) do
-        local specPos = spec:getPosition()
-        if specPos and spec:isMonster() then
-            local dist = getDistanceBetween(specPos, playerPos)
-            if dist <= maxDistance and dist > 0 and spec:canShoot() then
-                if dist < closestDist then
-                    closest = spec
-                    closestDist = dist
-                end
-            end
-        end
-    end
-    return closest
+    return stack and stack.spec
 end
 
 -- Widget de cooldowns na tela para Stack
@@ -1946,37 +1948,44 @@ macro(100, function()
 end)
 
 -- Macro principal de Stack
+-- Funciona com: BOTAO DIREITO DO MOUSE + TECLA DIRECIONAL
 EspStackMacro = macro(50, "Stack Esp", function()
     if isInPz() then return end
     if fugaActive then return end
 
+    -- Precisa do botao direito do mouse pressionado
+    local isMousePressed = g_mouse.isPressed(3)
+    if not isMousePressed then return end
+
     for _, stk in ipairs(storage.esp_stack_list) do
-        if stk.spell and stk.spell ~= "" then
+        if stk.spell and stk.spell ~= "" and stk.enabled ~= false then
             local uid = stk.uid
             if now >= (stackCooldownEnd[uid] or 0) then
-                local creature = nil
+                -- Define as teclas baseado na config ("WASD" ou "Arrows")
+                local selectedKeys = stk.key == "Arrows" and ARROW_KEYS or WASD_KEYS
 
-                if stk.key == "AUTO" then
-                    -- Modo automatico: ataca monstro mais proximo
-                    creature = getStackingMonsterAuto(stk.distance or 5)
-                else
-                    -- Modo tecla dinamica: verifica se a tecla esta pressionada
-                    local stkKey = stk.key or ""
-                    local stkDir = stk.direction or "North"
-                    if stkKey ~= "" and modules.corelib.g_keyboard.isKeyPressed(stkKey) then
-                        creature = getStackingMonster(stkDir, stk.distance or 5)
+                for _, dir in ipairs(selectedKeys) do
+                    if modules.corelib.g_keyboard.isKeyPressed(dir) then
+                        local creature = getStackingMonster(dir, stk.distance or 5)
+
+                        if creature then
+                            -- 1. Ataca o monstro
+                            g_game.attack(creature)
+
+                            -- 2. Apos 50ms, cancela o ataque (envia attack nil)
+                            schedule(50, function()
+                                g_game.attack(nil)
+                            end)
+
+                            -- 3. Apos 200ms, cancela definitivamente
+                            schedule(200, function()
+                                g_game.cancelAttack()
+                            end)
+
+                            stackCooldownEnd[uid] = now + ((stk.cd or 2) * 1000)
+                            return true
+                        end
                     end
-                end
-
-                if creature then
-                    say(stk.spell)
-                    g_game.attack(creature)
-                    schedule(50, function() g_game.attack(nil) end)
-                    schedule(200, function()
-                        g_game.cancelAttack()
-                    end)
-                    stackCooldownEnd[uid] = now + ((stk.cd or 2) * 1000)
-                    return
                 end
             end
         end
@@ -1988,7 +1997,7 @@ local function createStackWidget(index, stackData)
   local uid = stackData.uid
   local entry = setupUI([[
 Panel
-  height: 240
+  height: 190
   margin-top: 3
 
   Label
@@ -2055,7 +2064,7 @@ Panel
     Label
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
-      text: Tecla:
+      text: Teclas:
       color: white
       text-auto-resize: true
     ComboBox
@@ -2066,28 +2075,8 @@ Panel
       width: 100
 
   Panel
-    id: row2b
-    anchors.top: row2.bottom
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 24
-    margin-top: 2
-    Label
-      anchors.left: parent.left
-      anchors.verticalCenter: parent.verticalCenter
-      text: Direcao:
-      color: white
-      text-auto-resize: true
-    ComboBox
-      id: dirCombo
-      anchors.right: parent.right
-      anchors.top: parent.top
-      anchors.bottom: parent.bottom
-      width: 100
-
-  Panel
     id: row3
-    anchors.top: row2b.bottom
+    anchors.top: row2.bottom
     anchors.left: parent.left
     anchors.right: parent.right
     height: 24
@@ -2133,30 +2122,15 @@ Panel
   entry.row3.distEdit:setText(tostring(stackData.distance or 5))
   entry.row4.cdEdit:setText(tostring(stackData.cd or 2))
 
-  -- ComboBox de teclas (dinamico)
-  entry.row2.keyCombo:addOption("AUTO")
-  for _, k in ipairs(ALL_STACK_KEYS) do
-    entry.row2.keyCombo:addOption(k)
-  end
-  entry.row2.keyCombo:setCurrentOption(stackData.key or "AUTO")
-
-  -- ComboBox de direcao
-  local directions = {"North", "South", "East", "West", "NE", "NW", "SE", "SW"}
-  for _, d in ipairs(directions) do
-    entry.row2b.dirCombo:addOption(d)
-  end
-  entry.row2b.dirCombo:setCurrentOption(stackData.direction or "North")
-
-  -- Esconder direcao se AUTO
-  if stackData.key == "AUTO" then
-    entry.row2b:hide()
-  end
+  -- ComboBox de teclas: WASD (8 direcoes com diagonais) ou Arrows (4 direcoes)
+  entry.row2.keyCombo:addOption("WASD")
+  entry.row2.keyCombo:addOption("Arrows")
+  entry.row2.keyCombo:setCurrentOption(stackData.key or "WASD")
 
   -- Tooltips
   entry.spellEdit:setTooltip("Spell de ataque (ex: exori vis)")
   entry.row1.nameEdit:setTooltip("Nome exibido no widget da tela (opcional)")
-  entry.row2.keyCombo:setTooltip("AUTO = ataca mais proximo, ou escolha uma tecla")
-  entry.row2b.dirCombo:setTooltip("Direcao do ataque ao pressionar a tecla")
+  entry.row2.keyCombo:setTooltip("WASD = 8 direcoes (W/A/S/D + Q/E/Z/C), Arrows = 4 direcoes")
   entry.row3.distEdit:setTooltip("Distancia maxima para atacar (1-10)")
   entry.row4.cdEdit:setTooltip("Cooldown em segundos entre usos")
 
@@ -2175,14 +2149,6 @@ Panel
   end
   entry.row2.keyCombo.onOptionChange = function(w, text)
     storage.esp_stack_list[index].key = text
-    if text == "AUTO" then
-      entry.row2b:hide()
-    else
-      entry.row2b:show()
-    end
-  end
-  entry.row2b.dirCombo.onOptionChange = function(w, text)
-    storage.esp_stack_list[index].direction = text
   end
   entry.row3.distEdit.onTextChange = function(w, text)
     storage.esp_stack_list[index].distance = tonumber(text) or 5
@@ -2233,8 +2199,7 @@ addStackBtn.addStack.onClick = function(w)
   table.insert(storage.esp_stack_list, {
     spell = "stack " .. newIndex,
     name = "",
-    key = "AUTO",
-    direction = "North",
+    key = "WASD",
     distance = 5,
     cd = 2,
     uid = newUid
@@ -2497,10 +2462,15 @@ EspRetasMacro = macro(100, "Retas Esp", function()
                     shouldActivate = modules.corelib.g_keyboard.isKeyPressed(ret.key)
                 end
                 if shouldActivate then
-                    if canUseReta(target) then
-                        say(ret.spell)
-                        retasCooldownEnd[uid] = now + ((ret.cd or 2) * 1000)
-                        return
+                    -- Verifica % de vida do alvo (se configurado)
+                    local hpLimit = ret.hpPercent or 100
+                    local targetHp = target:getHealthPercent()
+                    if targetHp and targetHp <= hpLimit then
+                        if canUseReta(target) then
+                            say(ret.spell)
+                            retasCooldownEnd[uid] = now + ((ret.cd or 2) * 1000)
+                            return
+                        end
                     end
                 end
             end
@@ -2513,7 +2483,7 @@ local function createRetaWidget(index, retaData)
   local uid = retaData.uid
   local entry = setupUI([[
 Panel
-  height: 210
+  height: 240
   margin-top: 3
 
   Label
@@ -2630,6 +2600,26 @@ Panel
       anchors.bottom: parent.bottom
       width: 55
 
+  Panel
+    id: row5
+    anchors.top: row4.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 2
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: % Vida alvo:
+      color: #FFAA00
+      text-auto-resize: true
+    TextEdit
+      id: hpEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 55
+
   ]], retasContent)
 
   entry.title:setText("Reta #" .. index)
@@ -2637,6 +2627,7 @@ Panel
   entry.row1.nameEdit:setText(retaData.name or "")
   entry.row3.distEdit:setText(tostring(retaData.distance or 4))
   entry.row4.cdEdit:setText(tostring(retaData.cd or 2))
+  entry.row5.hpEdit:setText(tostring(retaData.hpPercent or 100))
 
   -- ComboBox de teclas para Reta
   entry.row2.keyCombo:addOption("AUTO")
@@ -2660,9 +2651,10 @@ Panel
   entry.row2.keyCombo:setTooltip("AUTO = sempre ativo, ou tecla para ativar")
   entry.row3.distEdit:setTooltip("Distancia maxima para reta (1-10)")
   entry.row4.cdEdit:setTooltip("Cooldown em segundos entre usos")
+  entry.row5.hpEdit:setTooltip("Usa reta somente se vida do alvo <= este % (1-100)")
 
   -- Estilo neon
-  local retInputs = {entry.spellEdit, entry.row1.nameEdit, entry.row3.distEdit, entry.row4.cdEdit}
+  local retInputs = {entry.spellEdit, entry.row1.nameEdit, entry.row3.distEdit, entry.row4.cdEdit, entry.row5.hpEdit}
   for _, input in ipairs(retInputs) do
     input:setBackgroundColor("#00000033")
     input:setColor("#00DDFF")
@@ -2682,6 +2674,12 @@ Panel
   end
   entry.row4.cdEdit.onTextChange = function(w, text)
     storage.esp_retas_list[index].cd = tonumber(text) or 2
+  end
+  entry.row5.hpEdit.onTextChange = function(w, text)
+    local val = tonumber(text) or 100
+    if val < 1 then val = 1 end
+    if val > 100 then val = 100 end
+    storage.esp_retas_list[index].hpPercent = val
   end
 
   entry.removeBtn.onClick = function(w)
@@ -2729,6 +2727,7 @@ addRetaBtn.addReta.onClick = function(w)
     key = "AUTO",
     distance = 4,
     cd = 2,
+    hpPercent = 100,
     uid = newUid
   })
   refreshRetas()

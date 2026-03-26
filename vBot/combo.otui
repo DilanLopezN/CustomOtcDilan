@@ -316,7 +316,7 @@ BotServer < Panel
 
 ComboWindow < MainWindow
   !text: tr('Combo Options')
-  size: 500 280
+  size: 500 320
   @onEscape: self:hide()
 
   ComboTrigger
@@ -333,7 +333,7 @@ ComboWindow < MainWindow
     text: Combo Trigger
     color: #ff7700
 
-  ComboActions    
+  ComboActions
     id: actions
     anchors.top: trigger.bottom
     anchors.left: trigger.left
@@ -346,13 +346,13 @@ ComboWindow < MainWindow
     margin-left: 10
     margin-top: 85
     text: Combo Actions
-    color: #ff7700   
+    color: #ff7700
 
-  BotServer    
+  BotServer
     id: server
     anchors.top: actions.top
     anchors.left: actions.right
-    margin-left: 10 
+    margin-left: 10
 
   Label
     id: title
@@ -363,12 +363,84 @@ ComboWindow < MainWindow
     text: BotServer
     color: #ff7700
 
+  Panel
+    id: cooldownPanel
+    image-source: /images/ui/panel_flat
+    image-border: 6
+    padding: 3
+    anchors.top: actions.bottom
+    anchors.left: trigger.left
+    anchors.right: trigger.right
+    height: 30
+    margin-top: 10
+
+    Label
+      id: cooldownTitle
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      margin-left: 5
+      text: Cooldown
+      color: #ffaa00
+
+    Label
+      id: cdLabel
+      anchors.left: cooldownTitle.right
+      anchors.verticalCenter: parent.verticalCenter
+      margin-left: 5
+      text: (ms):
+      color: white
+
+    TextEdit
+      id: cooldownEdit
+      anchors.left: cdLabel.right
+      anchors.verticalCenter: parent.verticalCenter
+      margin-left: 5
+      width: 80
+      height: 17
+      font: cipsoftFont
+
+    Label
+      id: cdSecondsLabel
+      anchors.left: cooldownEdit.right
+      anchors.verticalCenter: parent.verticalCenter
+      margin-left: 10
+      text: (s):
+      color: white
+
+    TextEdit
+      id: cooldownSecondsEdit
+      anchors.left: cdSecondsLabel.right
+      anchors.verticalCenter: parent.verticalCenter
+      margin-left: 5
+      width: 60
+      height: 17
+      font: cipsoftFont
+
+    Button
+      id: autoCalcBtn
+      anchors.left: cooldownSecondsEdit.right
+      anchors.verticalCenter: parent.verticalCenter
+      margin-left: 10
+      width: 80
+      height: 20
+      text: Auto CD
+      font: cipsoftFont
+
+  Label
+    id: cooldownLabel
+    anchors.top: actions.bottom
+    anchors.left: trigger.left
+    margin-left: 3
+    margin-top: 1
+    text: Combo Cooldown
+    color: #ff7700
+
   HorizontalSeparator
     id: separator
     anchors.right: parent.right
     anchors.left: parent.left
     anchors.bottom: closeButton.top
-    margin-bottom: 8    
+    margin-bottom: 8
 
   Button
     id: closeButton

@@ -46,9 +46,17 @@ if not storage[panelName] then
     commandsEnabled = true,
     serverEnabled = false,
     serverLeaderTarget = false,
-    serverTriggers = true
+    serverTriggers = true,
+    comboCooldown = 0
   }
 end
+
+-- Garante que comboCooldown existe em configs antigos
+if not storage[panelName].comboCooldown then
+  storage[panelName].comboCooldown = 0
+end
+
+local comboCooldownEnd = 0
 
 local config = storage[panelName]
 
@@ -191,7 +199,85 @@ if rootWidget then
   comboWindow.server.botServerLeader:setText(config.serverLeader)
   comboWindow.server.botServerLeader.onTextChange = function(widget, text)
     config.serverLeader = text
-  end  
+  end
+
+  -- Cooldown UI
+  local cdSyncing = false
+  comboWindow.cooldownPanel.cooldownEdit:setText(tostring(config.comboCooldown))
+  comboWindow.cooldownPanel.cooldownSecondsEdit:setText(tostring(config.comboCooldown / 1000))
+
+  comboWindow.cooldownPanel.cooldownEdit.onTextChange = function(widget, text)
+    if cdSyncing then return end
+    local val = tonumber(text) or 0
+    config.comboCooldown = val
+    cdSyncing = true
+    comboWindow.cooldownPanel.cooldownSecondsEdit:setText(tostring(val / 1000))
+    cdSyncing = false
+  end
+
+  comboWindow.cooldownPanel.cooldownSecondsEdit.onTextChange = function(widget, text)
+    if cdSyncing then return end
+    local val = tonumber(text) or 0
+    local ms = math.floor(val * 1000)
+    config.comboCooldown = ms
+    cdSyncing = true
+    comboWindow.cooldownPanel.cooldownEdit:setText(tostring(ms))
+    cdSyncing = false
+  end
+
+  -- Auto Calculate Cooldown
+  comboWindow.cooldownPanel.autoCalcBtn.onClick = function(widget)
+    local maxCd = 0
+    local comboSpell = config.spell and config.spell:lower() or ""
+
+    -- Busca em storage.atkSpells (ataques basicos)
+    if storage.atkSpells then
+      for _, atk in ipairs(storage.atkSpells) do
+        if atk and atk.spell and atk.spell ~= "" and atk.cd then
+          if comboSpell ~= "" and atk.spell:lower() == comboSpell then
+            maxCd = math.max(maxCd, atk.cd * 1000)
+          elseif comboSpell == "" then
+            maxCd = math.max(maxCd, atk.cd * 1000)
+          end
+        end
+      end
+    end
+
+    -- Busca em storage.esp_ataque_list (ataques especiais)
+    if storage.esp_ataque_list then
+      for _, atk in ipairs(storage.esp_ataque_list) do
+        if atk and atk.spell and atk.spell ~= "" and atk.cd then
+          if comboSpell ~= "" and atk.spell:lower() == comboSpell then
+            maxCd = math.max(maxCd, atk.cd * 1000)
+          elseif comboSpell == "" then
+            maxCd = math.max(maxCd, atk.cd * 1000)
+          end
+        end
+      end
+    end
+
+    -- Se nao encontrou match exato, pega o maior CD de todos os ataques
+    if maxCd == 0 then
+      if storage.atkSpells then
+        for _, atk in ipairs(storage.atkSpells) do
+          if atk and atk.cd then
+            maxCd = math.max(maxCd, atk.cd * 1000)
+          end
+        end
+      end
+      if storage.esp_ataque_list then
+        for _, atk in ipairs(storage.esp_ataque_list) do
+          if atk and atk.cd then
+            maxCd = math.max(maxCd, atk.cd * 1000)
+          end
+        end
+      end
+    end
+
+    config.comboCooldown = maxCd
+    comboWindow.cooldownPanel.cooldownEdit:setText(tostring(maxCd))
+    comboWindow.cooldownPanel.cooldownSecondsEdit:setText(tostring(maxCd / 1000))
+  end
 end
 
 -- bot server
@@ -324,12 +410,22 @@ onMissle(function(missle)
     local t1 = toCreatures[1]
     leaderTarget = t1
     if c1:getName():lower() == config.shootLeader:lower() then
+      -- Verifica cooldown do combo
+      if config.comboCooldown > 0 and now < comboCooldownEnd then
+        return
+      end
+      local acted = false
       if config.attackItemEnabled and config.item and config.item > 100 and findItem(config.item) then
         useWith(config.item, t1)
+        acted = true
       end
       if config.attackSpellEnabled and config.spell:len() > 1 then
         say(config.spell)
-      end 
+        acted = true
+      end
+      if acted and config.comboCooldown > 0 then
+        comboCooldownEnd = now + config.comboCooldown
+      end
     end
   end
 end)
@@ -394,11 +490,22 @@ end)
 local timeout = now
 macro(10, function()
   if config.enabled and startCombo then
+    -- Verifica cooldown do combo
+    if config.comboCooldown > 0 and now < comboCooldownEnd then
+      startCombo = false
+      return
+    end
+    local acted = false
     if config.attackItemEnabled and config.item and config.item > 100 and findItem(config.item) then
       useWith(config.item, getTarget())
+      acted = true
     end
     if config.attackSpellEnabled and config.spell:len() > 1 then
       say(config.spell)
+      acted = true
+    end
+    if acted and config.comboCooldown > 0 then
+      comboCooldownEnd = now + config.comboCooldown
     end
     startCombo = false
   end

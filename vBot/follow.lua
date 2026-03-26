@@ -1,84 +1,81 @@
 setDefaultTab("Uteis")
 
-
+UI.Label("Seek and Destroyer")
 
 --[[
-  ╔══════════════════════════════════════════════════════════╗
-  ║  CHASE & KEEP TARGET - Perseguição 100% (obitoc port)   ║
-  ║  Escadas, buracos, jump up/down, portas, custom IDs     ║
-  ║  ESC = desliga tudo | Sem setDefaultTab (fica na aba)   ║
-  ╚══════════════════════════════════════════════════════════╝
+  ============================================================
+  ATTACK FOLLOW - Hold Target + Chase Ofensivo
+  ============================================================
+  Combina Hold Target com Chase Attack:
+  - Mantém o target salvo (re-ataca se perder o target)
+  - Persegue o inimigo de forma OFENSIVA
+  - Atravessa portas, escadas, buracos (jumps) e custom IDs
+  - ESC para desativar e limpar o target
+  ============================================================
 ]]
 
--- ============================================================
--- CONFIG
--- ============================================================
-CT = {
+AttackFollow = {
     targetId = nil,
-    currentTargetId = nil,
+    targetName = nil,
     obstaclesQueue = {},
     obstacleWalkTime = 0,
-    lastCancelFollow = 0,
-    followDelay = 300,
-    keyCancel = 'Escape',
-
+    currentTargetId = nil,
     walkDirTable = {
         [0] = {'y', -1},
         [1] = {'x', 1},
         [2] = {'y', 1},
         [3] = {'x', -1},
     },
-
+    flags = {
+        ignoreNonPathable = true,
+        precision = 0,
+        ignoreCreatures = true
+    },
     jumpSpell = {
         up = 'jump up',
         down = 'jump down'
     },
-
-    -- Item usado pra descer buraco (ex: shovel, pick, rope)
     defaultItem = 1111,
-    -- Spell usada em tiles que precisam de spell
     defaultSpell = 'skip',
-
-    -- IDs de tiles interativos (escada, buraco, etc)
-    -- castSpell = true → usa defaultSpell ao invés de clicar
     customIds = {
         { id = 1948, castSpell = false },
         { id = 595,  castSpell = false },
         { id = 1067, castSpell = false },
         { id = 1080, castSpell = false },
+        {id = 13296, castSpell = false},
         { id = 386,  castSpell = true  },
     },
+    walkDelay = 200
 }
 
--- ============================================================
--- FUNÇÕES AUXILIARES (idênticas ao obitoc)
--- ============================================================
-CT.distanceFromPlayer = function(position)
+-- ==================== FUNÇÕES UTILITÁRIAS ====================
+
+AttackFollow.distanceFromPlayer = function(position)
     local distx = math.abs(posx() - position.x)
     local disty = math.abs(posy() - position.y)
     return math.sqrt(distx * distx + disty * disty)
 end
 
-CT.walkToPathDir = function(path)
-    if path then
+AttackFollow.walkToPathDir = function(path)
+    if (path) then
         g_game.walk(path[1], false)
     end
 end
 
-CT.getDirection = function(playerPos, direction)
-    local walkDir = CT.walkDirTable[direction]
-    if walkDir then
+AttackFollow.getDirection = function(playerPos, direction)
+    local walkDir = AttackFollow.walkDirTable[direction]
+    if (walkDir) then
         playerPos[walkDir[1]] = playerPos[walkDir[1]] + walkDir[2]
     end
     return playerPos
 end
 
-CT.checkItemOnTile = function(tile, tbl)
-    if not tile then return nil end
+AttackFollow.checkItemOnTile = function(tile, tbl)
+    if (not tile) then return nil end
     for _, item in ipairs(tile:getItems()) do
         local itemId = item:getId()
         for _, itemSelected in ipairs(tbl) do
-            if itemId == itemSelected.id then
+            if (itemId == itemSelected.id) then
                 return itemSelected
             end
         end
@@ -86,28 +83,59 @@ CT.checkItemOnTile = function(tile, tbl)
     return nil
 end
 
-CT.shiftFromQueue = function()
-    g_game.cancelFollow()
-    CT.lastCancelFollow = now + CT.followDelay
-    table.remove(CT.obstaclesQueue, 1)
-    -- Após cruzar obstáculo, re-ataca o alvo salvo
-    if CT.targetId then
-        schedule(300, function()
-            local found = getCreatureById(CT.targetId)
-            if found then
-                g_game.attack(found)
-                g_game.setChaseMode(1)
-            end
-        end)
-    end
+AttackFollow.shiftFromQueue = function()
+    table.remove(AttackFollow.obstaclesQueue, 1)
 end
 
--- ============================================================
--- DETECÇÃO: Porta
--- ============================================================
-CT.checkIfWentToDoor = function(creature, newPos, oldPos)
-    if CT.obstaclesQueue[1] and CT.distanceFromPlayer(newPos) < CT.distanceFromPlayer(oldPos) then return end
-    if math.abs(newPos.x - oldPos.x) == 2 or math.abs(newPos.y - oldPos.y) == 2 then
+-- ==================== DETECÇÃO DE OBSTÁCULOS ====================
+
+-- Detecta Custom ID (buracos, teleports, etc)
+AttackFollow.checkIfWentToCustomId = function(creature, newPos, oldPos, scheduleTime)
+    local tile = g_map.getTile(oldPos)
+    local customId = AttackFollow.checkItemOnTile(tile, AttackFollow.customIds)
+    if (not customId) then return end
+
+    if (not scheduleTime) then scheduleTime = 0 end
+
+    schedule(scheduleTime, function()
+        if (oldPos.z == posz() or #AttackFollow.obstaclesQueue > 0) then
+            table.insert(AttackFollow.obstaclesQueue, {
+                oldPos = oldPos,
+                newPos = newPos,
+                tilePos = oldPos,
+                customId = customId,
+                tile = g_map.getTile(oldPos),
+                isCustom = true
+            })
+        end
+    end)
+end
+
+-- Detecta Escada
+AttackFollow.checkIfWentToStair = function(creature, newPos, oldPos, scheduleTime)
+    if (g_map.getMinimapColor(oldPos) ~= 210) then return end
+    local tile = g_map.getTile(oldPos)
+    if (tile:isPathable()) then return end
+
+    if (not scheduleTime) then scheduleTime = 0 end
+
+    schedule(scheduleTime, function()
+        if (oldPos.z == posz() or #AttackFollow.obstaclesQueue > 0) then
+            table.insert(AttackFollow.obstaclesQueue, {
+                oldPos = oldPos,
+                newPos = newPos,
+                tilePos = oldPos,
+                tile = tile,
+                isStair = true
+            })
+        end
+    end)
+end
+
+-- Detecta Porta
+AttackFollow.checkIfWentToDoor = function(creature, newPos, oldPos)
+    if (AttackFollow.obstaclesQueue[1] and AttackFollow.distanceFromPlayer(newPos) < AttackFollow.distanceFromPlayer(oldPos)) then return end
+    if (math.abs(newPos.x - oldPos.x) == 2 or math.abs(newPos.y - oldPos.y) == 2) then
         local doorPos = { z = oldPos.z }
         local directionX = oldPos.x - newPos.x
         local directionY = oldPos.y - newPos.y
@@ -131,24 +159,19 @@ CT.checkIfWentToDoor = function(creature, newPos, oldPos)
         end
 
         local doorTile = g_map.getTile(doorPos)
-        if not doorTile then return end
-        if not doorTile:isPathable() or doorTile:isWalkable() then return end
+        if (not doorTile:isPathable() or doorTile:isWalkable()) then return end
 
-        table.insert(CT.obstaclesQueue, {
+        table.insert(AttackFollow.obstaclesQueue, {
             newPos = newPos,
             tilePos = doorPos,
             tile = doorTile,
             isDoor = true,
         })
-        g_game.cancelFollow()
-        CT.lastCancelFollow = now + CT.followDelay
     end
 end
 
--- ============================================================
--- DETECÇÃO: Jump (mudou de andar sem escada perto)
--- ============================================================
-CT.checkifWentToJumpPos = function(creature, newPos, oldPos)
+-- Detecta Jump (mudança de andar sem escada)
+AttackFollow.checkIfWentToJumpPos = function(creature, newPos, oldPos)
     local pos1 = { x = oldPos.x - 1, y = oldPos.y - 1 }
     local pos2 = { x = oldPos.x + 1, y = oldPos.y + 1 }
 
@@ -156,7 +179,7 @@ CT.checkifWentToJumpPos = function(creature, newPos, oldPos)
     for x = pos1.x, pos2.x do
         for y = pos1.y, pos2.y do
             local tilePos = { x = x, y = y, z = oldPos.z }
-            if g_map.getMinimapColor(tilePos) == 210 then
+            if (g_map.getMinimapColor(tilePos) == 210) then
                 hasStair = true
                 goto continue
             end
@@ -164,411 +187,353 @@ CT.checkifWentToJumpPos = function(creature, newPos, oldPos)
     end
     ::continue::
 
-    if hasStair then return end
+    if (hasStair) then return end
 
-    local spell = newPos.z > oldPos.z and CT.jumpSpell.down or CT.jumpSpell.up
+    local spell = newPos.z > oldPos.z and AttackFollow.jumpSpell.down or AttackFollow.jumpSpell.up
     local dir = creature:getDirection()
 
-    table.insert(CT.obstaclesQueue, {
+    table.insert(AttackFollow.obstaclesQueue, {
         oldPos = oldPos,
         oldTile = g_map.getTile(oldPos),
         spell = spell,
         dir = dir,
         isJump = true,
     })
-    g_game.cancelFollow()
-    CT.lastCancelFollow = now + CT.followDelay
 end
 
--- ============================================================
--- DETECÇÃO: Escada (minimap color 210)
--- ============================================================
-CT.checkIfWentToStair = function(creature, newPos, oldPos, scheduleTime)
-    if g_map.getMinimapColor(oldPos) ~= 210 then return end
-    local tile = g_map.getTile(oldPos)
-    if not tile then return end
-    if tile:isPathable() then return end
+-- ==================== ESC PARA DESATIVAR ====================
 
-    if not scheduleTime then scheduleTime = 0 end
-
-    schedule(scheduleTime, function()
-        if oldPos.z == posz() or #CT.obstaclesQueue > 0 then
-            table.insert(CT.obstaclesQueue, {
-                oldPos = oldPos,
-                newPos = newPos,
-                tilePos = oldPos,
-                tile = tile,
-                isStair = true
-            })
-            g_game.cancelFollow()
-            CT.lastCancelFollow = now + CT.followDelay
-        end
-    end)
-end
-
--- ============================================================
--- DETECÇÃO: Custom ID (buraco, rope, etc)
--- ============================================================
-CT.checkIfWentToCustomId = function(creature, newPos, oldPos, scheduleTime)
-    local tile = g_map.getTile(oldPos)
-    local customId = CT.checkItemOnTile(tile, CT.customIds)
-    if not customId then return end
-
-    if not scheduleTime then scheduleTime = 0 end
-
-    schedule(scheduleTime, function()
-        if oldPos.z == posz() or #CT.obstaclesQueue > 0 then
-            table.insert(CT.obstaclesQueue, {
-                oldPos = oldPos,
-                newPos = newPos,
-                tilePos = oldPos,
-                customId = customId,
-                tile = g_map.getTile(oldPos),
-                isCustom = true
-            })
-            g_game.cancelFollow()
-            CT.lastCancelFollow = now + CT.followDelay
-        end
-    end)
-end
-
--- ============================================================
--- MACRO PRINCIPAL: Attack Follow (persegue + ataca sempre)
--- ============================================================
-CT.mainMacro = macro(CT.followDelay, "Attack Follow", function()
-    -- ESC: desliga tudo
-    if modules.corelib.g_keyboard.isKeyPressed(CT.keyCancel) then
-        CT.targetId = nil
-        CT.currentTargetId = nil
-        CT.obstaclesQueue = {}
-        g_game.setChaseMode(0)
-        g_game.cancelAttack()
-        g_game.cancelFollow()
-        return
-    end
-
-    -- Se tem obstáculos na fila, deixa os processadores lidarem
-    if #CT.obstaclesQueue > 0 then return end
-
-    local target = g_game.getAttackingCreature()
-
-    -- Se está atacando um player, salva o ID e persegue atacando
-    if target and target:isPlayer() then
-        CT.targetId = target:getId()
-        g_game.setChaseMode(1)
-
-        local targetPos = target:getPosition()
-        local playerPos = pos()
-
-        -- Mesmo andar: garante que está atacando e se aproxima
-        if targetPos and targetPos.z == playerPos.z then
-            local dist = CT.distanceFromPlayer(targetPos)
-
-            -- Se está longe (não consegue bater), corre até o alvo
-            if dist > 1 then
-                local path = findPath(playerPos, targetPos, 50, { ignoreNonPathable = true, precision = 1, ignoreCreatures = true })
-                if path then
-                    CT.walkToPathDir(path)
-                else
-                    -- Sem path direto, tenta cancelar follow pra não ficar preso
-                    local followingPlayer = g_game.getFollowingCreature()
-                    if followingPlayer and followingPlayer:getId() == target:getId() then
-                        CT.lastCancelFollow = now + CT.followDelay
-                        g_game.cancelFollow()
-                    end
-                end
-            end
-            -- Sempre re-ataca pra garantir que não perde o ataque
-            g_game.attack(target)
-        end
-        return
-    end
-
-    -- Perdeu o alvo: tenta re-atacar pelo ID salvo e persegue
-    if CT.targetId then
-        local found = getCreatureById(CT.targetId)
-        if found then
-            g_game.attack(found)
-            g_game.setChaseMode(1)
-
-            local targetPos = found:getPosition()
-            local playerPos = pos()
-
-            if targetPos and targetPos.z == playerPos.z then
-                local dist = CT.distanceFromPlayer(targetPos)
-                if dist > 1 then
-                    local path = findPath(playerPos, targetPos, 50, { ignoreNonPathable = true, precision = 1, ignoreCreatures = true })
-                    if path then
-                        CT.walkToPathDir(path)
-                    end
-                end
-            end
-        end
-        return delay(found and 300 or 100)
+onKeyPress(function(keys)
+    if keys == "Escape" and AttackFollow.targetId then
+        AttackFollow.targetId = nil
+        AttackFollow.targetName = nil
+        AttackFollow.obstaclesQueue = {}
+        AttackFollow.obstacleWalkTime = 0
+        AttackFollow.currentTargetId = nil
     end
 end)
-CT.mainMacro.setOff()
-addIcon("ChaseTarget", {item = 14189, text = "AtkFollow"}, CT.mainMacro)
 
--- ============================================================
--- TRACKER: Atualiza o ID do alvo
--- ============================================================
+-- ==================== MACRO PRINCIPAL ====================
+
+-- Hold Target + Chase: salva o target e persegue
+AttackFollow.mainMacro = macro(AttackFollow.walkDelay, "Attack Follow", function()
+    local currentTarget = g_game.getAttackingCreature()
+
+    -- Se atacando alguém, salva como target (ignora NPC)
+    if currentTarget and currentTarget:getPosition().z == posz() and not currentTarget:isNpc() then
+        if AttackFollow.targetId ~= currentTarget:getId() then
+            AttackFollow.targetId = currentTarget:getId()
+            AttackFollow.targetName = currentTarget:getName()
+            AttackFollow.obstaclesQueue = {}
+            AttackFollow.currentTargetId = currentTarget:getId()
+        end
+    end
+
+    -- Sem target salvo, não faz nada
+    if not AttackFollow.targetId then return end
+
+    -- Se não está atacando, procura o target salvo e re-ataca (Hold Target)
+    if not currentTarget then
+        for i, spec in ipairs(getSpectators()) do
+            local sameFloor = spec:getPosition().z == posz()
+            local isOldTarget = spec:getId() == AttackFollow.targetId
+
+            if sameFloor and isOldTarget then
+                g_game.attack(spec)
+                return
+            end
+        end
+        -- Target não visível, não cancela (pode voltar a aparecer)
+        return
+    end
+
+    -- Se tem obstáculo na fila, deixa os processadores lidarem
+    if (#AttackFollow.obstaclesQueue > 0) then return end
+
+    -- Chase: persegue o target no mesmo andar
+    local targetPos = currentTarget:getPosition()
+    if (not targetPos) then return end
+
+    local myPos = pos()
+
+    if (targetPos.z == myPos.z) then
+        local path = findPath(myPos, targetPos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = true })
+        if (not path) then return end
+
+        -- Se está longe, anda até o target
+        if (#path > 1 and not player:isWalking()) then
+            autoWalk(targetPos, 20, { ignoreNonPathable = true, precision = 1 })
+        end
+    end
+end)
+
+-- ==================== ATUALIZA TARGET ID ====================
+
 macro(1, function()
-    if CT.mainMacro.isOff() then return end
-    local target = g_game.getAttackingCreature()
-    if target and target:isPlayer() then
-        if CT.currentTargetId ~= target:getId() then
-            CT.currentTargetId = target:getId()
-            CT.targetId = target:getId()
-        end
+    if (AttackFollow.mainMacro.isOff()) then return end
+    local currentTarget = g_game.getAttackingCreature()
+
+    if (currentTarget and AttackFollow.currentTargetId ~= currentTarget:getId()) then
+        AttackFollow.currentTargetId = currentTarget:getId()
     end
 end)
 
--- Cancela follow se o alvo mudou de andar
-macro(1000, function()
-    if CT.mainMacro.isOff() then return end
-    local target = g_game.getFollowingCreature()
-    if target then
-        local targetPos = target:getPosition()
-        if not targetPos or targetPos.z ~= posz() then
-            g_game.cancelFollow()
-        end
-    end
-end)
+-- ==================== LISTENERS DE OBSTÁCULOS ====================
 
--- ============================================================
--- LISTENERS: Detectam movimentação do alvo
--- ============================================================
-
--- Porta (mesmo andar)
+-- Detecta porta (mesmo andar)
 onCreaturePositionChange(function(creature, newPos, oldPos)
-    if CT.mainMacro.isOff() then return end
-    if not CT.currentTargetId then return end
-    if creature:getId() == CT.currentTargetId and newPos and oldPos and oldPos.z == newPos.z then
-        CT.checkIfWentToDoor(creature, newPos, oldPos)
+    if (AttackFollow.mainMacro.isOff()) then return end
+    if (not AttackFollow.targetId) then return end
+
+    if creature:getId() == AttackFollow.targetId and newPos and oldPos and oldPos.z == newPos.z then
+        AttackFollow.checkIfWentToDoor(creature, newPos, oldPos)
     end
 end)
 
--- Jump (mudou de andar sem escada perto)
+-- Detecta jump (mudou de andar, sem escada)
 onCreaturePositionChange(function(creature, newPos, oldPos)
-    if CT.mainMacro.isOff() then return end
-    if not CT.currentTargetId then return end
-    if creature:getId() == CT.currentTargetId and newPos and oldPos and oldPos.z == posz() and oldPos.z ~= newPos.z then
-        CT.checkifWentToJumpPos(creature, newPos, oldPos)
+    if (AttackFollow.mainMacro.isOff()) then return end
+    if (not AttackFollow.targetId) then return end
+
+    if creature:getId() == AttackFollow.targetId and newPos and oldPos and oldPos.z == posz() and oldPos.z ~= newPos.z then
+        AttackFollow.checkIfWentToJumpPos(creature, newPos, oldPos)
     end
 end)
 
--- Escada (minimap color 210)
+-- Detecta escada
 onCreaturePositionChange(function(creature, newPos, oldPos)
-    if CT.mainMacro.isOff() then return end
-    if not CT.currentTargetId then return end
-    if creature:getId() == CT.currentTargetId and oldPos and g_map.getMinimapColor(oldPos) == 210 then
+    if (AttackFollow.mainMacro.isOff()) then return end
+    if (not AttackFollow.targetId) then return end
+
+    if creature:getId() == AttackFollow.targetId and oldPos and g_map.getMinimapColor(oldPos) == 210 then
         local scheduleTime = oldPos.z == posz() and 0 or 250
-        CT.checkIfWentToStair(creature, newPos, oldPos, scheduleTime)
+        AttackFollow.checkIfWentToStair(creature, newPos, oldPos, scheduleTime)
     end
 end)
 
--- Custom IDs (buracos, ropes, etc)
+-- Detecta custom id (buracos, teleports)
 onCreaturePositionChange(function(creature, newPos, oldPos)
-    if CT.mainMacro.isOff() then return end
-    if not CT.currentTargetId then return end
-    if creature:getId() == CT.currentTargetId and oldPos and oldPos.z == posz() and (not newPos or oldPos.z ~= newPos.z) then
-        CT.checkIfWentToCustomId(creature, newPos, oldPos)
+    if (AttackFollow.mainMacro.isOff()) then return end
+    if (not AttackFollow.targetId) then return end
+
+    if creature:getId() == AttackFollow.targetId and oldPos and oldPos.z == posz() and (not newPos or oldPos.z ~= newPos.z) then
+        AttackFollow.checkIfWentToCustomId(creature, newPos, oldPos)
     end
 end)
 
--- ============================================================
--- LIMPEZA DA FILA: Remove obstáculos de andares errados
--- ============================================================
+-- ==================== PROCESSADORES DE OBSTÁCULOS ====================
+
+-- Limpa fila quando muda de andar (já processou)
 macro(1, function()
-    if CT.mainMacro.isOff() then return end
-    if CT.obstaclesQueue[1] and ((not CT.obstaclesQueue[1].isJump and CT.obstaclesQueue[1].tilePos.z ~= posz()) or (CT.obstaclesQueue[1].isJump and CT.obstaclesQueue[1].oldPos.z ~= posz())) then
-        table.remove(CT.obstaclesQueue, 1)
+    if (AttackFollow.mainMacro.isOff()) then return end
+
+    if (AttackFollow.obstaclesQueue[1] and ((not AttackFollow.obstaclesQueue[1].isJump and AttackFollow.obstaclesQueue[1].tilePos.z ~= posz()) or (AttackFollow.obstaclesQueue[1].isJump and AttackFollow.obstaclesQueue[1].oldPos.z ~= posz()))) then
+        table.remove(AttackFollow.obstaclesQueue, 1)
     end
 end)
 
--- ============================================================
--- PROCESSADOR: Escadas (idêntico obitoc)
--- ============================================================
+-- Processa escadas
 macro(100, function()
-    if CT.mainMacro.isOff() then return end
-    if not (CT.obstaclesQueue[1] and CT.obstaclesQueue[1].isStair) then return end
+    if (AttackFollow.mainMacro.isOff()) then return end
+    if (AttackFollow.obstaclesQueue[1] and AttackFollow.obstaclesQueue[1].isStair) then
+        local playerPos = pos()
+        local walkingTile = AttackFollow.obstaclesQueue[1].tile
+        local walkingTilePos = AttackFollow.obstaclesQueue[1].tilePos
 
-    local playerPos = pos()
-    local walkingTile = CT.obstaclesQueue[1].tile
-    local walkingTilePos = CT.obstaclesQueue[1].tilePos
-
-    if CT.distanceFromPlayer(walkingTilePos) < 2 then
-        if CT.obstacleWalkTime < now then
-            local nextFloor = g_map.getTile(walkingTilePos)
-            if nextFloor and nextFloor:isPathable() then
-                CT.obstacleWalkTime = now + 250
-                use(nextFloor:getTopUseThing())
-            else
-                CT.obstacleWalkTime = now + 250
-                CT.walkToPathDir(findPath(playerPos, walkingTilePos, 1, { ignoreCreatures = false, precision = 0, ignoreNonPathable = true }))
+        if (AttackFollow.distanceFromPlayer(walkingTilePos) < 2) then
+            if (AttackFollow.obstacleWalkTime < now) then
+                local nextFloor = g_map.getTile(walkingTilePos)
+                if (nextFloor:isPathable()) then
+                    AttackFollow.obstacleWalkTime = now + 250
+                    use(nextFloor:getTopUseThing())
+                else
+                    AttackFollow.obstacleWalkTime = now + 250
+                    AttackFollow.walkToPathDir(findPath(playerPos, walkingTilePos, 1, { ignoreCreatures = false, precision = 0, ignoreNonPathable = true }))
+                end
+                AttackFollow.shiftFromQueue()
+                return
             end
-            CT.shiftFromQueue()
+        end
+
+        local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false })
+        if (path == nil or #path <= 1) then
+            if (path == nil) then
+                use(walkingTile:getTopUseThing())
+            end
             return
         end
-    end
 
-    local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false })
-    if path == nil or #path <= 1 then
-        if path == nil then
-            use(walkingTile:getTopUseThing())
-        end
-        return
-    end
-
-    local tileToUse = playerPos
-    for i, value in ipairs(path) do
-        if i > 5 then break end
-        tileToUse = CT.getDirection(tileToUse, value)
-    end
-    tileToUse = g_map.getTile(tileToUse)
-    if tileToUse then
-        use(tileToUse:getTopUseThing())
-    end
-end)
-
--- ============================================================
--- PROCESSADOR: Portas (idêntico obitoc)
--- ============================================================
-macro(1, function()
-    if CT.mainMacro.isOff() then return end
-    if not (CT.obstaclesQueue[1] and CT.obstaclesQueue[1].isDoor) then return end
-
-    local playerPos = pos()
-    local walkingTile = CT.obstaclesQueue[1].tile
-    local walkingTilePos = CT.obstaclesQueue[1].tilePos
-
-    if table.compare and table.compare(playerPos, CT.obstaclesQueue[1].newPos) then
-        CT.obstacleWalkTime = 0
-        CT.shiftFromQueue()
-        return
-    end
-
-    local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false })
-    if path == nil or #path <= 1 then
-        if path == nil then
-            if CT.obstacleWalkTime < now then
-                g_game.use(walkingTile:getTopThing())
-                CT.obstacleWalkTime = now + 500
-            end
-        end
-        return
-    end
-end)
-
--- ============================================================
--- PROCESSADOR: Jumps (idêntico obitoc)
--- ============================================================
-macro(100, function()
-    if CT.mainMacro.isOff() then return end
-    if not (CT.obstaclesQueue[1] and CT.obstaclesQueue[1].isJump) then return end
-
-    local playerPos = pos()
-    local walkingTilePos = CT.obstaclesQueue[1].oldPos
-    local distance = CT.distanceFromPlayer(walkingTilePos)
-
-    if playerPos.z ~= walkingTilePos.z then
-        CT.shiftFromQueue()
-        return
-    end
-
-    local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false })
-
-    -- Em cima do tile: vira e fala a spell
-    if distance == 0 then
-        g_game.turn(CT.obstaclesQueue[1].dir)
-        schedule(50, function()
-            if CT.obstaclesQueue[1] then
-                say(CT.obstaclesQueue[1].spell)
-            end
-        end)
-        return
-    -- Perto: anda 1 sqm até o tile
-    elseif distance < 2 then
-        if CT.obstacleWalkTime < now then
-            CT.walkToPathDir(findPath(playerPos, walkingTilePos, 1, { ignoreCreatures = false, precision = 0, ignoreNonPathable = true }))
-            CT.obstacleWalkTime = now + 500
-        end
-        return
-    -- Médio: usa o tile diretamente
-    elseif distance >= 2 and distance < 5 and path then
-        use(CT.obstaclesQueue[1].oldTile:getTopUseThing())
-    -- Longe: navega pelo path
-    elseif path then
         local tileToUse = playerPos
         for i, value in ipairs(path) do
-            if i > 5 then break end
-            tileToUse = CT.getDirection(tileToUse, value)
+            if (i > 5) then break end
+            tileToUse = AttackFollow.getDirection(tileToUse, value)
         end
         tileToUse = g_map.getTile(tileToUse)
-        if tileToUse then
+        if (tileToUse) then
             use(tileToUse:getTopUseThing())
         end
     end
 end)
 
--- ============================================================
--- PROCESSADOR: Custom IDs (idêntico obitoc)
--- ============================================================
-macro(100, function()
-    if CT.mainMacro.isOff() then return end
-    if not (CT.obstaclesQueue[1] and CT.obstaclesQueue[1].isCustom) then return end
+-- Processa portas
+macro(1, function()
+    if (AttackFollow.mainMacro.isOff()) then return end
 
-    local playerPos = pos()
-    local walkingTile = CT.obstaclesQueue[1].tile
-    local walkingTilePos = CT.obstaclesQueue[1].tilePos
-    local distance = CT.distanceFromPlayer(walkingTilePos)
+    if (AttackFollow.obstaclesQueue[1] and AttackFollow.obstaclesQueue[1].isDoor) then
+        local playerPos = pos()
+        local walkingTile = AttackFollow.obstaclesQueue[1].tile
+        local walkingTilePos = AttackFollow.obstaclesQueue[1].tilePos
 
-    if playerPos.z ~= walkingTilePos.z then
-        CT.shiftFromQueue()
-        return
-    end
+        if (table.compare(playerPos, AttackFollow.obstaclesQueue[1].newPos)) then
+            AttackFollow.obstacleWalkTime = 0
+            AttackFollow.shiftFromQueue()
+        end
 
-    -- Em cima do tile
-    if distance == 0 then
-        if CT.obstaclesQueue[1].customId.castSpell then
-            say(CT.defaultSpell)
+        local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false })
+        if (path == nil or #path <= 1) then
+            if (path == nil) then
+                if (AttackFollow.obstacleWalkTime < now) then
+                    g_game.use(walkingTile:getTopThing())
+                    AttackFollow.obstacleWalkTime = now + 500
+                end
+            end
             return
         end
-    -- Perto
-    elseif distance < 2 then
-        local item = findItem(CT.defaultItem)
-        if CT.obstaclesQueue[1].customId.castSpell or not item then
-            if CT.obstacleWalkTime < now then
-                CT.walkToPathDir(findPath(playerPos, walkingTilePos, 1, { ignoreCreatures = false, precision = 0, ignoreNonPathable = true }))
-                CT.obstacleWalkTime = now + 500
-            end
-        elseif item then
-            g_game.useWith(item, walkingTile)
-            CT.shiftFromQueue()
-        end
-        return
-    end
-
-    -- Longe: navega pelo path
-    local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false })
-    if path == nil or #path <= 1 then
-        if path == nil then
-            use(walkingTile:getTopUseThing())
-        end
-        return
-    end
-
-    local tileToUse = playerPos
-    for i, value in ipairs(path) do
-        if i > 5 then break end
-        tileToUse = CT.getDirection(tileToUse, value)
-    end
-    tileToUse = g_map.getTile(tileToUse)
-    if tileToUse then
-        use(tileToUse:getTopUseThing())
     end
 end)
+
+-- Processa jumps
+macro(100, function()
+    if (AttackFollow.mainMacro.isOff()) then return end
+
+    if (AttackFollow.obstaclesQueue[1] and AttackFollow.obstaclesQueue[1].isJump) then
+        local playerPos = pos()
+        local walkingTilePos = AttackFollow.obstaclesQueue[1].oldPos
+        local distance = AttackFollow.distanceFromPlayer(walkingTilePos)
+
+        if (playerPos.z ~= walkingTilePos.z) then
+            AttackFollow.shiftFromQueue()
+            return
+        end
+
+        local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false })
+
+        if (distance == 0) then
+            g_game.turn(AttackFollow.obstaclesQueue[1].dir)
+            schedule(50, function()
+                if (AttackFollow.obstaclesQueue[1]) then
+                    say(AttackFollow.obstaclesQueue[1].spell)
+                end
+            end)
+            return
+        elseif (distance < 2) then
+            if (AttackFollow.obstacleWalkTime < now) then
+                AttackFollow.walkToPathDir(findPath(playerPos, walkingTilePos, 1, { ignoreCreatures = false, precision = 0, ignoreNonPathable = true }))
+                AttackFollow.obstacleWalkTime = now + 500
+            end
+            return
+        elseif (distance >= 2 and distance < 5 and path) then
+            use(AttackFollow.obstaclesQueue[1].oldTile:getTopUseThing())
+        elseif (path) then
+            local tileToUse = playerPos
+            for i, value in ipairs(path) do
+                if (i > 5) then break end
+                tileToUse = AttackFollow.getDirection(tileToUse, value)
+            end
+            tileToUse = g_map.getTile(tileToUse)
+            if (tileToUse) then
+                use(tileToUse:getTopUseThing())
+            end
+        end
+    end
+end)
+
+-- Processa custom IDs
+macro(100, function()
+    if (AttackFollow.mainMacro.isOff()) then return end
+
+    if (AttackFollow.obstaclesQueue[1] and AttackFollow.obstaclesQueue[1].isCustom) then
+        local playerPos = pos()
+        local walkingTile = AttackFollow.obstaclesQueue[1].tile
+        local walkingTilePos = AttackFollow.obstaclesQueue[1].tilePos
+        local distance = AttackFollow.distanceFromPlayer(walkingTilePos)
+
+        if (playerPos.z ~= walkingTilePos.z) then
+            AttackFollow.shiftFromQueue()
+            return
+        end
+
+        if (distance == 0) then
+            if (AttackFollow.obstaclesQueue[1].customId.castSpell) then
+                say(AttackFollow.defaultSpell)
+                return
+            end
+        elseif (distance < 2) then
+            local item = findItem(AttackFollow.defaultItem)
+            if (AttackFollow.obstaclesQueue[1].customId.castSpell or not item) then
+                if (AttackFollow.obstacleWalkTime < now) then
+                    AttackFollow.walkToPathDir(findPath(playerPos, walkingTilePos, 1, { ignoreCreatures = false, precision = 0, ignoreNonPathable = true }))
+                    AttackFollow.obstacleWalkTime = now + 500
+                end
+            elseif (item) then
+                g_game.useWith(item, walkingTile)
+                AttackFollow.shiftFromQueue()
+            end
+            return
+        end
+
+        local path = findPath(playerPos, walkingTilePos, 50, { ignoreNonPathable = true, precision = 0, ignoreCreatures = false })
+        if (path == nil or #path <= 1) then
+            if (path == nil) then
+                use(walkingTile:getTopUseThing())
+            end
+            return
+        end
+
+        local tileToUse = playerPos
+        for i, value in ipairs(path) do
+            if (i > 5) then break end
+            tileToUse = AttackFollow.getDirection(tileToUse, value)
+        end
+        tileToUse = g_map.getTile(tileToUse)
+        if (tileToUse) then
+            use(tileToUse:getTopUseThing())
+        end
+    end
+end)
+
+-- ==================== ÍCONE NA TELA ====================
+
+local atkFollowIcon = addIcon("attackFollow", { text = "ATK\nFollow", switchable = false, moveable = true }, function()
+    if AttackFollow.mainMacro.isOn() then
+        AttackFollow.mainMacro.setOff()
+        -- Limpa tudo ao desligar
+        AttackFollow.targetId = nil
+        AttackFollow.targetName = nil
+        AttackFollow.obstaclesQueue = {}
+        AttackFollow.currentTargetId = nil
+    else
+        AttackFollow.mainMacro.setOn()
+    end
+end)
+atkFollowIcon:setSize({ height = 30, width = 50 })
+atkFollowIcon.text:setFont('verdana-11px-rounded')
+
+-- Atualiza ícone com status
+macro(50, function()
+    if AttackFollow.mainMacro.isOn() then
+        if AttackFollow.targetId then
+            local name = AttackFollow.targetName or "?"
+            if #name > 6 then name = name:sub(1, 6) .. ".." end
+            atkFollowIcon.text:setColoredText({ "ATK\n", "white", name, "#00FF00" })
+        else
+            atkFollowIcon.text:setColoredText({ "ATK\n", "white", "ON", "green" })
+        end
+    else
+        atkFollowIcon.text:setColoredText({ "ATK\n", "white", "OFF", "red" })
+    end
+end)
+
 
 UI.Separator()
 UI.Label("Treino Uteis")

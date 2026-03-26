@@ -51,7 +51,6 @@ local luaFiles = {
   "xeno_menu",
   "hold_target",
   "cavebot_control_panel",
-  "ataques",
   "macros",
   "music",
   "background",

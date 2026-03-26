@@ -27,11 +27,8 @@ local luaFiles = {
   "alarms",
   "Conditions",
   "Equipper",
-  "pushmax",
   "combo",
   "HealBot",
-  "new_healer",
-  "AttackBot", -- last of major modules
   "ingame_editor",
   "Dropper",
   "Containers",
@@ -70,6 +67,3 @@ schedule(500, function()
 end)
 
 setDefaultTab("Main")
-UI.Separator()
-UI.Label("Private Scripts:")
-UI.Separator()

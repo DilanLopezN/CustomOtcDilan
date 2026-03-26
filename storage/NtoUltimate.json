@@ -2,5 +2,6 @@
     "spells": [
 
     ],
+    "target": false,
     "enabled": false
 }

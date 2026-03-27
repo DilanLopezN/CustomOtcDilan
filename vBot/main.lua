@@ -1720,7 +1720,7 @@ refreshAtaques()
 EspTabBar:addTab("Stack", espPanel6)
 local stackContent = espPanel6.scrollArea
         UI.Separator(stackContent)
-        color= UI.Label("Stack (botao direito + direcional):",stackContent)
+        color= UI.Label("Stack (botao do meio + direcional):",stackContent)
 color:setColor("#FF00FF")
         UI.Separator(stackContent)
 
@@ -1948,12 +1948,12 @@ macro(100, function()
 end)
 
 -- Macro principal de Stack
--- Funciona com: BOTAO DIREITO DO MOUSE + TECLA DIRECIONAL
+-- Funciona com: BOTAO DO MEIO DO MOUSE + TECLA DIRECIONAL
 EspStackMacro = macro(50, "Stack Esp", function()
     if isInPz() then return end
     if fugaActive then return end
 
-    -- Precisa do botao direito do mouse pressionado
+    -- Precisa do botao do meio do mouse pressionado
     local isMousePressed = g_mouse.isPressed(3)
     if not isMousePressed then return end
 
@@ -1969,16 +1969,22 @@ EspStackMacro = macro(50, "Stack Esp", function()
                         local creature = getStackingMonster(dir, stk.distance or 5)
 
                         if creature then
-                            -- 1. Ataca o monstro
+                            -- 1. Ataca o monstro (seleciona como alvo)
                             g_game.attack(creature)
 
-                            -- 2. Apos 50ms, cancela o ataque (envia attack nil)
+                            -- 2. Apos 50ms, solta o poder (cast da spell)
+                            local spellText = stk.spell
                             schedule(50, function()
+                                say(spellText)
+                            end)
+
+                            -- 3. Apos 200ms, cancela o ataque (envia attack nil)
+                            schedule(200, function()
                                 g_game.attack(nil)
                             end)
 
-                            -- 3. Apos 200ms, cancela definitivamente
-                            schedule(200, function()
+                            -- 4. Apos 400ms, cancela definitivamente
+                            schedule(400, function()
                                 g_game.cancelAttack()
                             end)
 

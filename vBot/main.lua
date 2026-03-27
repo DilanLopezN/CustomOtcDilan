@@ -82,6 +82,58 @@ espPanel6:setId("6")
 espPanel7 = g_ui.createWidget("espPanel")
 espPanel7:setId("7")
 
+espPanel8 = g_ui.createWidget("espPanel")
+espPanel8:setId("8")
+
+-- Helper: salva perfil atual (OK de confirmacao)
+local function saveEspeciaisProfile()
+  if player then
+    local charName = player:getName()
+    if charName and charName:len() > 0 then
+      local perfilConfigName = modules.game_bot.contentsPanel.config:getCurrentOption().text
+      local PERFIS_DIR = "/bot/" .. perfilConfigName .. "/vBot_perfis/"
+      if not g_resources.directoryExists(PERFIS_DIR) then
+        g_resources.makeDir(PERFIS_DIR)
+      end
+      local function deepCopyJson(t)
+        if type(t) ~= "table" then return t end
+        local ok, enc = pcall(json.encode, t)
+        if ok and enc then
+          local ok2, dec = pcall(json.decode, enc)
+          if ok2 then return dec end
+        end
+        return t
+      end
+      local data = {}
+      data.esp_fugas_list = deepCopyJson(storage.esp_fugas_list or {})
+      data.esp_fugas_widgets_show = deepCopyJson(storage.esp_fugas_widgets_show or {})
+      data.esp_fugas_widgets_pos = deepCopyJson(storage.esp_fugas_widgets_pos or {})
+      data.esp_trap_list = deepCopyJson(storage.esp_trap_list or {})
+      data.esp_combo_list = deepCopyJson(storage.esp_combo_list or {})
+      data.esp_buffs_list = deepCopyJson(storage.esp_buffs_list or {})
+      data.esp_ataque_list = deepCopyJson(storage.esp_ataque_list or {})
+      data.esp_stack_list = deepCopyJson(storage.esp_stack_list or {})
+      data.esp_retas_list = deepCopyJson(storage.esp_retas_list or {})
+      data.esp_perseguir_list = deepCopyJson(storage.esp_perseguir_list or {})
+      data.esp_auto_kai = deepCopyJson(storage.esp_auto_kai or {})
+      data.ingame_hotkeys = storage.ingame_hotkeys or ""
+      data.bgPlayer = deepCopyJson(storage.bgPlayer or {})
+      data._originalName = charName
+      local sName = charName:gsub("[^%w_%-]", "_")
+      local fileName = PERFIS_DIR .. sName .. ".json"
+      local ok, result = pcall(function() return json.encode(data, 2) end)
+      if ok and result then
+        g_resources.writeFileContents(fileName, result)
+        storage.perfis_current = charName
+        if type(storage.perfis_data) ~= "table" then storage.perfis_data = {} end
+        if not table.find(storage.perfis_data, sName) then
+          table.insert(storage.perfis_data, sName)
+        end
+      end
+    end
+  end
+end
+
 
 -- =============================================
 -- TAB: FUGAS (dinamico)
@@ -542,6 +594,24 @@ end
 
 -- Load existing fugas on start
 refreshFugas()
+
+-- Botao OK para salvar fugas
+local okFugasBtn = setupUI([[
+Panel
+  height: 25
+  margin-top: 5
+  Button
+    id: okBtn
+    color: #00FF88
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 25
+    text: OK - Salvar Fugas
+]], fugasContent)
+okFugasBtn.okBtn.onClick = function()
+  saveEspeciaisProfile()
+end
 
 -- Macro para atualizar os widgets na tela (status visual)
 macro(200, function()
@@ -1011,6 +1081,24 @@ end
 -- Load existing traps on start
 refreshTraps()
 
+-- Botao OK para salvar traps
+local okTrapsBtn = setupUI([[
+Panel
+  height: 25
+  margin-top: 5
+  Button
+    id: okBtn
+    color: #00FF88
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 25
+    text: OK - Salvar Traps
+]], trapsContent)
+okTrapsBtn.okBtn.onClick = function()
+  saveEspeciaisProfile()
+end
+
 -- Macro de traps: usa baseado em ordem, cooldown, % vida, await
 EspTrapMacro = macro(200, "Traps", function()
   if not g_game.isAttacking() then return end
@@ -1178,6 +1266,24 @@ end
 
 -- Load existing combos on start
 refreshCombos()
+
+-- Botao OK para salvar combos
+local okCombosBtn = setupUI([[
+Panel
+  height: 25
+  margin-top: 5
+  Button
+    id: okBtn
+    color: #00FF88
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 25
+    text: OK - Salvar Combos
+]], combosContent)
+okCombosBtn.okBtn.onClick = function()
+  saveEspeciaisProfile()
+end
 
 -- Macro de combo
 EspComboMacro = macro(200, "Combo Especial", function()
@@ -1381,6 +1487,24 @@ end
 
 -- Load existing buffs on start
 refreshBuffs()
+
+-- Botao OK para salvar buffs
+local okBuffsBtn = setupUI([[
+Panel
+  height: 25
+  margin-top: 5
+  Button
+    id: okBtn
+    color: #00FF88
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 25
+    text: OK - Salvar Buffs
+]], buffsContent)
+okBuffsBtn.okBtn.onClick = function()
+  saveEspeciaisProfile()
+end
 
 -- Macro de buffs: auto-usa quando tempo ativo acabar e nao estiver em CD
 EspBuffMacro = macro(200, "Buffs Auto", function()
@@ -1710,6 +1834,24 @@ end
 
 -- Load existing ataques on start
 refreshAtaques()
+
+-- Botao OK para salvar ataques
+local okAtaquesBtn = setupUI([[
+Panel
+  height: 25
+  margin-top: 5
+  Button
+    id: okBtn
+    color: #00FF88
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 25
+    text: OK - Salvar Ataques
+]], ataqueContent)
+okAtaquesBtn.okBtn.onClick = function()
+  saveEspeciaisProfile()
+end
 
 
 -- =============================================
@@ -2215,6 +2357,24 @@ end
 
 -- Load existing stacks on start
 refreshStacks()
+
+-- Botao OK para salvar stacks
+local okStacksBtn = setupUI([[
+Panel
+  height: 25
+  margin-top: 5
+  Button
+    id: okBtn
+    color: #00FF88
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 25
+    text: OK - Salvar Stacks
+]], stackContent)
+okStacksBtn.okBtn.onClick = function()
+  saveEspeciaisProfile()
+end
 
 
 -- =============================================
@@ -2742,6 +2902,336 @@ end
 -- Load existing retas on start
 refreshRetas()
 
+-- Botao OK para salvar retas
+local okRetasBtn = setupUI([[
+Panel
+  height: 25
+  margin-top: 5
+  Button
+    id: okBtn
+    color: #00FF88
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 25
+    text: OK - Salvar Retas
+]], retasContent)
+okRetasBtn.okBtn.onClick = function()
+  saveEspeciaisProfile()
+end
+
+
+-- =============================================
+-- TAB: PERSEGUIR (dinamico - adicionar/remover)
+-- Se inimigo targetado >= 4 sqm, usa a skill configurada
+-- Se <= 3 sqm, nao faz nada
+-- =============================================
+EspTabBar:addTab("Perseguir", espPanel8)
+local perseguirContent = espPanel8.scrollArea
+        UI.Separator(perseguirContent)
+        color= UI.Label("Perseguir (skill se alvo >= 4 sqm):",perseguirContent)
+color:setColor("#FF8800")
+        UI.Separator(perseguirContent)
+
+-- Storage: lista de perseguir
+if type(storage.esp_perseguir_list) ~= "table" then
+  storage.esp_perseguir_list = {}
+end
+
+-- Atribui IDs unicos para cada perseguir existente
+local perseguirIdCounter = 0
+for _, p in ipairs(storage.esp_perseguir_list) do
+  if p.uid and p.uid >= perseguirIdCounter then
+    perseguirIdCounter = p.uid + 1
+  end
+end
+for _, p in ipairs(storage.esp_perseguir_list) do
+  if not p.uid then
+    p.uid = perseguirIdCounter
+    perseguirIdCounter = perseguirIdCounter + 1
+  end
+end
+
+local perseguirCooldownEnd = {}  -- [uid] = timestamp quando CD termina
+local perseguirWidgets = {}
+
+-- Widget de cooldowns na tela para Perseguir
+storage.espPerseguirWidgetPos = storage.espPerseguirWidgetPos or {x = 10, y = 450}
+
+local espPerseguirWidget = setupUI([[
+UIWidget
+  background-color: black
+  font: verdana-11px-rounded
+  opacity: 0.70
+  padding: 5 10
+  focusable: true
+  phantom: false
+  draggable: true
+  text-auto-resize: true
+]], g_ui.getRootWidget())
+
+espPerseguirWidget:setPosition({x = storage.espPerseguirWidgetPos.x, y = storage.espPerseguirWidgetPos.y})
+
+espPerseguirWidget.onDragEnter = function(widget, mousePos)
+    widget:breakAnchors()
+    widget.movingReference = {
+        x = mousePos.x - widget:getX(),
+        y = mousePos.y - widget:getY()
+    }
+    return true
+end
+
+espPerseguirWidget.onDragMove = function(widget, mousePos)
+    widget:move(
+        mousePos.x - widget.movingReference.x,
+        mousePos.y - widget.movingReference.y
+    )
+    return true
+end
+
+espPerseguirWidget.onDragLeave = function(widget, pos)
+    storage.espPerseguirWidgetPos.x = widget:getX()
+    storage.espPerseguirWidgetPos.y = widget:getY()
+    return true
+end
+
+-- Macro para atualizar widget de cooldowns Perseguir na tela
+macro(100, function()
+    local text = ""
+    for _, per in ipairs(storage.esp_perseguir_list) do
+        if per.spell and per.spell ~= "" then
+            local uid = per.uid
+            local cdTime = perseguirCooldownEnd[uid] or 0
+            local remaining = math.max(0, math.ceil((cdTime - now) / 1000))
+            local name = per.name and per.name ~= "" and per.name or per.spell
+            text = text .. name .. ": " .. remaining .. "s\n"
+        end
+    end
+    if text ~= "" then
+        espPerseguirWidget:setText(text:sub(1, -2))
+        espPerseguirWidget:show()
+    else
+        espPerseguirWidget:hide()
+    end
+end)
+
+-- Macro principal de Perseguir
+-- Logica: se o inimigo targetado tiver ate 3 sqm de distancia, nao faz nada
+-- Se tiver 4 ou mais sqm, usa a skill configurada
+EspPerseguirMacro = macro(100, "Perseguir Esp", function()
+    if isInPz() then return end
+    if fugaActive then return end
+
+    local target = g_game.getAttackingCreature()
+    if not target then return end
+
+    local targetPos = target:getPosition()
+    if not targetPos then return end
+
+    local playerPos = pos()
+    if not playerPos then return end
+
+    -- Verificar se esta no mesmo andar
+    if targetPos.z ~= playerPos.z then return end
+
+    local distance = getDistanceBetween(playerPos, targetPos)
+
+    -- Se distancia <= 3, nao faz nada
+    if distance <= 3 then return end
+
+    -- Se distancia >= 4, usa a skill configurada
+    for _, per in ipairs(storage.esp_perseguir_list) do
+        if per.spell and per.spell ~= "" and per.enabled ~= false then
+            local uid = per.uid
+            if now >= (perseguirCooldownEnd[uid] or 0) then
+                say(per.spell)
+                perseguirCooldownEnd[uid] = now + ((per.cd or 2) * 1000)
+                return
+            end
+        end
+    end
+end, perseguirContent)
+
+-- Funcao para criar widget de um Perseguir
+local function createPerseguirWidget(index, perData)
+  local uid = perData.uid
+  local entry = setupUI([[
+Panel
+  height: 150
+  margin-top: 3
+
+  Label
+    id: title
+    anchors.top: parent.top
+    anchors.left: parent.left
+    color: #FF8800
+    font: verdana-11px-rounded
+    text: Perseguir
+
+  Button
+    id: removeBtn
+    color: red
+    anchors.top: parent.top
+    anchors.right: parent.right
+    width: 20
+    height: 18
+    text: X
+
+  Label
+    id: lbl1
+    anchors.top: removeBtn.bottom
+    anchors.left: parent.left
+    margin-top: 3
+    text: Spell:
+    color: white
+    text-auto-resize: true
+
+  TextEdit
+    id: spellEdit
+    anchors.top: lbl1.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 22
+    margin-top: 1
+
+  Panel
+    id: row1
+    anchors.top: spellEdit.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 3
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: Nome (tela):
+      color: #AADDFF
+      text-auto-resize: true
+    TextEdit
+      id: nameEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 100
+
+  Panel
+    id: row2
+    anchors.top: row1.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 2
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: CD(s):
+      color: white
+      text-auto-resize: true
+    TextEdit
+      id: cdEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 55
+
+  ]], perseguirContent)
+
+  entry.title:setText("Perseguir #" .. index)
+  entry.spellEdit:setText(perData.spell or "")
+  entry.row1.nameEdit:setText(perData.name or "")
+  entry.row2.cdEdit:setText(tostring(perData.cd or 2))
+
+  -- Tooltips
+  entry.spellEdit:setTooltip("Spell usada quando alvo esta a 4+ sqm (ex: jutsu shunshin)")
+  entry.row1.nameEdit:setTooltip("Nome exibido no widget da tela (opcional)")
+  entry.row2.cdEdit:setTooltip("Cooldown em segundos entre usos")
+
+  -- Estilo neon
+  local perInputs = {entry.spellEdit, entry.row1.nameEdit, entry.row2.cdEdit}
+  for _, input in ipairs(perInputs) do
+    input:setBackgroundColor("#00000033")
+    input:setColor("#00DDFF")
+  end
+
+  entry.spellEdit.onTextChange = function(w, text)
+    storage.esp_perseguir_list[index].spell = text
+  end
+  entry.row1.nameEdit.onTextChange = function(w, text)
+    storage.esp_perseguir_list[index].name = text
+  end
+  entry.row2.cdEdit.onTextChange = function(w, text)
+    storage.esp_perseguir_list[index].cd = tonumber(text) or 2
+  end
+
+  entry.removeBtn.onClick = function(w)
+    perseguirCooldownEnd[uid] = nil
+    table.remove(storage.esp_perseguir_list, index)
+    refreshPerseguir()
+  end
+
+  table.insert(perseguirWidgets, entry)
+  return entry
+end
+
+-- Refresh all perseguir widgets
+function refreshPerseguir()
+  for _, w in ipairs(perseguirWidgets) do
+    w:destroy()
+  end
+  perseguirWidgets = {}
+  for i, perData in ipairs(storage.esp_perseguir_list) do
+    createPerseguirWidget(i, perData)
+  end
+end
+
+-- Botao adicionar perseguir
+local addPerseguirBtn = setupUI([[
+Panel
+  height: 25
+  Button
+    id: addPerseguir
+    color: green
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 25
+    text: + Adicionar Perseguir
+]], perseguirContent)
+
+addPerseguirBtn.addPerseguir.onClick = function(w)
+  local newIndex = #storage.esp_perseguir_list + 1
+  local newUid = perseguirIdCounter
+  perseguirIdCounter = perseguirIdCounter + 1
+  table.insert(storage.esp_perseguir_list, {
+    spell = "perseguir " .. newIndex,
+    name = "",
+    cd = 2,
+    uid = newUid
+  })
+  refreshPerseguir()
+end
+
+-- Load existing perseguir on start
+refreshPerseguir()
+
+-- Botao OK para salvar perseguir
+local okPerseguirBtn = setupUI([[
+Panel
+  height: 25
+  margin-top: 5
+  Button
+    id: okBtn
+    color: #00FF88
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 25
+    text: OK - Salvar Perseguir
+]], perseguirContent)
+okPerseguirBtn.okBtn.onClick = function()
+  saveEspeciaisProfile()
+end
+
 
 end
 end
@@ -2830,6 +3320,8 @@ do
     data.esp_stack_list = deepCopy(storage.esp_stack_list or {})
     -- Retas
     data.esp_retas_list = deepCopy(storage.esp_retas_list or {})
+    -- Perseguir
+    data.esp_perseguir_list = deepCopy(storage.esp_perseguir_list or {})
     -- Kai
     data.esp_auto_kai = deepCopy(storage.esp_auto_kai or {})
     -- Ingame scripts
@@ -2900,6 +3392,7 @@ do
     if data.esp_ataque_list then storage.esp_ataque_list = deepCopy(data.esp_ataque_list) end
     if data.esp_stack_list then storage.esp_stack_list = deepCopy(data.esp_stack_list) end
     if data.esp_retas_list then storage.esp_retas_list = deepCopy(data.esp_retas_list) end
+    if data.esp_perseguir_list then storage.esp_perseguir_list = deepCopy(data.esp_perseguir_list) end
     if data.esp_auto_kai then storage.esp_auto_kai = deepCopy(data.esp_auto_kai) end
     if data.ingame_hotkeys ~= nil then storage.ingame_hotkeys = data.ingame_hotkeys end
     if data.bgPlayer then storage.bgPlayer = deepCopy(data.bgPlayer) end
@@ -2922,6 +3415,7 @@ do
       if refreshAtaques then refreshAtaques() end
       if refreshStacks then refreshStacks() end
       if refreshRetas then refreshRetas() end
+      if refreshPerseguir then refreshPerseguir() end
     end)
 
     return true
@@ -3216,6 +3710,7 @@ MainWindow
             if refreshAtaques then refreshAtaques() end
             if refreshStacks then refreshStacks() end
             if refreshRetas then refreshRetas() end
+            if refreshPerseguir then refreshPerseguir() end
           end)
           PerfisWindow.statusLabel:setText("Perfil '" .. charName .. "' salvo!")
           PerfisWindow.statusLabel:setColor("#00FF88")

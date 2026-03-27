@@ -1196,7 +1196,7 @@ for s = 1, 5 do
   comboCooldownEnd[s] = {}
 end
 
--- ===== Header: "Combo de Ataque" + 5 slot buttons =====
+-- ===== Header: "Selecionar Combo" =====
 local comboHeaderPanel = setupUI([[
 Panel
   height: 22
@@ -1205,49 +1205,90 @@ Panel
     anchors.top: parent.top
     anchors.left: parent.left
     anchors.verticalCenter: parent.verticalCenter
-    text: Combo de Ataque:
+    text: Selecionar Combo:
     color: red
     font: verdana-11px-rounded
     text-auto-resize: true
 ]], combosContent)
 
-local comboSlotBtns = {}
-local comboSlotPanel = setupUI([[
-Panel
-  height: 26
-  margin-top: 2
-]], combosContent)
+-- ===== Lista de combos (5 slots) como lista selecionavel =====
+local comboListWidgets = {}
 
-for s = 1, 5 do
-  local btnWidth = 40
-  local btnMargin = 3
-  local btn = setupUI([[
-Button
-  id: slotBtn]] .. s .. [[
-
-  height: 24
-  width: ]] .. btnWidth .. [[
-
-  text: ]] .. s .. [[
-
-]], comboSlotPanel)
-  btn:setMarginLeft((s - 1) * (btnWidth + btnMargin))
-  comboSlotBtns[s] = btn
-end
-
-local function updateSlotBtnColors()
+local function updateComboList()
   for s = 1, 5 do
-    if s == storage.esp_combo_selected then
-      comboSlotBtns[s]:setColor("#00FF88")
-    else
-      comboSlotBtns[s]:setColor("#AAAAAA")
+    local w = comboListWidgets[s]
+    if w and not w:isDestroyed() then
+      local slot = storage.esp_combo_slots[s]
+      local name = (slot and slot.name and slot.name:len() > 0) and slot.name or ("Combo " .. s)
+      local jutsuCount = (slot and slot.jutsus) and #slot.jutsus or 0
+      w.comboName:setText(name)
+      w.jutsuCount:setText(jutsuCount .. " jutsus")
+      if s == storage.esp_combo_selected then
+        w:setBackgroundColor("#00FF8833")
+        w.comboName:setColor("#00FF88")
+        w.activeLabel:setText("[ATIVO]")
+        w.activeLabel:setColor("#00FF88")
+        w.activeLabel:setVisible(true)
+      else
+        w:setBackgroundColor("#FFFFFF11")
+        w.comboName:setColor("#CCCCCC")
+        w.activeLabel:setVisible(false)
+      end
     end
   end
 end
 
+for s = 1, 5 do
+  local entry = setupUI([[
+Panel
+  height: 28
+  margin-top: 2
+  Label
+    id: slotNum
+    anchors.left: parent.left
+    anchors.verticalCenter: parent.verticalCenter
+    text-auto-resize: true
+    color: #888888
+    font: verdana-11px-rounded
+  Label
+    id: comboName
+    anchors.left: slotNum.right
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 6
+    text-auto-resize: true
+    font: verdana-11px-rounded
+    color: #CCCCCC
+  Label
+    id: jutsuCount
+    anchors.right: parent.right
+    anchors.verticalCenter: parent.verticalCenter
+    text-auto-resize: true
+    color: #888888
+  Label
+    id: activeLabel
+    anchors.right: jutsuCount.left
+    anchors.verticalCenter: parent.verticalCenter
+    margin-right: 8
+    text-auto-resize: true
+    font: verdana-11px-rounded
+    color: #00FF88
+]], combosContent)
+
+  entry.slotNum:setText(s .. ".")
+  entry:setBackgroundColor("#FFFFFF11")
+
+  entry.onClick = function(w)
+    storage.esp_combo_selected = s
+    updateComboList()
+    refreshCombos()
+  end
+
+  comboListWidgets[s] = entry
+end
+
 UI.Separator(combosContent)
 
--- ===== Combo name edit =====
+-- ===== Combo name edit para o combo selecionado =====
 local comboNamePanel = setupUI([[
 Panel
   height: 24
@@ -1255,7 +1296,7 @@ Panel
   Label
     anchors.left: parent.left
     anchors.verticalCenter: parent.verticalCenter
-    text: Nome:
+    text: Renomear:
     color: #AADDFF
     text-auto-resize: true
   TextEdit
@@ -1271,6 +1312,7 @@ comboNamePanel.nameEdit:setColor("#FFD700")
 comboNamePanel.nameEdit.onTextChange = function(w, text)
   local sel = storage.esp_combo_selected
   storage.esp_combo_slots[sel].name = text
+  updateComboList()
 end
 
 UI.Separator(combosContent)
@@ -1501,7 +1543,7 @@ function refreshCombos()
   -- Atualizar nome no campo
   comboNamePanel.nameEdit:setText(slot.name or ("Combo " .. sel))
 
-  updateSlotBtnColors()
+  updateComboList()
 
   -- Criar widgets para cada jutsu do combo selecionado
   for i, jutsuData in ipairs(slot.jutsus) do
@@ -1590,15 +1632,8 @@ Panel
   end
 end
 
--- Slot button click handlers
-for s = 1, 5 do
-  comboSlotBtns[s].onClick = function(w)
-    storage.esp_combo_selected = s
-    refreshCombos()
-  end
-end
-
 -- Load on start
+updateComboList()
 refreshCombos()
 
 -- ===== Macro: executa jutsus do combo selecionado sequencialmente =====

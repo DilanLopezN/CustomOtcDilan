@@ -1273,9 +1273,9 @@ end
 
 UI.Separator(combosContent)
 
--- ===== Sistema de auto-deteccao de cooldown (casting repetido) =====
+-- ===== Sistema de teste de combo (deteccao de cooldown + ordem otima) =====
 local comboAutoCD = {}
-local autoCdState = { active = false, slotIndex = 0, jutsuIndex = 0, btn = nil, lastCastTime = 0, retryInterval = 200, detectedByEvent = false }
+local autoCdState = { active = false, slotIndex = 0, jutsuIndex = 0, btn = nil, lastCastTime = 0, retryInterval = 200, detectedByEvent = false, detectedCooldowns = {} }
 
 -- Detecta quando o proprio jogador fala a spell (cast bem-sucedido)
 onTalk(function(name, level, mode, text, channelId, tpos)
@@ -1425,6 +1425,7 @@ function autoCdAdvance()
   -- Primeiro cast
   say(jutsu.text:trim())
   autoCdState.lastCastTime = now
+  comboAutoCD[spellLower].firstCastTime = now
 
   -- Timeout por jutsu (30s para dar tempo de detectar)
   local currentIdx = autoCdState.jutsuIndex
@@ -1448,8 +1449,18 @@ function autoCdFinish()
   autoCdState.active = false
   autoCdState.detectedByEvent = false
   comboAutoCD = {}
+
+  -- Calcula ordem otima: jutsus com menor cooldown primeiro (mais casts = mais dano)
+  local slot = storage.esp_combo_slots[autoCdState.slotIndex]
+  if slot and #slot.jutsus > 1 then
+    -- Ordena por cooldown crescente (menor cd = mais dano por tempo)
+    table.sort(slot.jutsus, function(a, b)
+      return (a.cooldown or 1000) < (b.cooldown or 1000)
+    end)
+  end
+
   if autoCdState.btn and not autoCdState.btn:isDestroyed() then
-    autoCdState.btn:setText("Auto Cooldown")
+    autoCdState.btn:setText("Testar Combo")
     autoCdState.btn:setColor("#00CCFF")
   end
   refreshCombos()
@@ -1617,10 +1628,10 @@ Panel
     anchors.left: parent.left
     anchors.right: parent.right
     height: 25
-    text: Auto Cooldown
+    text: Testar Combo
 ]], combosContent)
 
-  autoCdBtnWidget.autoBtn:setTooltip("Testa cada jutsu do combo sequencialmente para detectar o cooldown")
+  autoCdBtnWidget.autoBtn:setTooltip("Testa cada jutsu do combo, detecta cooldowns automaticamente e ordena por maior dano")
   autoCdBtnWidget.autoBtn.onClick = function(w)
     local curSel = storage.esp_combo_selected
     local curSlot = storage.esp_combo_slots[curSel]
@@ -1630,7 +1641,7 @@ Panel
       -- Cancelar deteccao em andamento
       autoCdState.active = false
       comboAutoCD = {}
-      w:setText("Auto Cooldown")
+      w:setText("Testar Combo")
       w:setColor("#00CCFF")
       return
     end
@@ -1639,6 +1650,7 @@ Panel
     autoCdState.slotIndex = curSel
     autoCdState.jutsuIndex = 0
     autoCdState.btn = w
+    autoCdState.detectedCooldowns = {}
     w:setText("Testando...")
     w:setColor("#FFFF00")
     autoCdAdvance()
@@ -4193,28 +4205,25 @@ end
 
 UI.Separator()
 
--- ===== Macro de dano total acumulado =====
-local StopExecution = 0
-local ExecutionTime = 5
+-- ===== Dano total acumulado (apenas tracking interno, sem spam) =====
 local TotalDamage = 0
+local LastDamageTime = 0
 
 onTextMessage(function(Mode, Text)
     if string.find(Text, "due to your attack") then
         local Damage = tonumber(string.match(Text, "%d+"))
         if Damage then
             TotalDamage = TotalDamage + Damage
-            if StopExecution == 0 then
-                StopExecution = now + (ExecutionTime * 1000)
-            end
+            LastDamageTime = now
         end
     end
 end)
 
-macro(500, function()
-    if StopExecution > 0 and now >= StopExecution then
-        say("Dano total acumulado: " .. TotalDamage .. " em " .. ExecutionTime .. " segundos.")
-        StopExecution = 0
+-- Reset dano acumulado apos 10s sem atacar (silencioso)
+macro(1000, function()
+    if TotalDamage > 0 and LastDamageTime > 0 and (now - LastDamageTime) > 10000 then
         TotalDamage = 0
+        LastDamageTime = 0
     end
 end)
 

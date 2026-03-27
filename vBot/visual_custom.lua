@@ -17,7 +17,7 @@ corText = storage.visualCustom.corText or "#00AAFF"
 
 local vcUI = setupUI([[
 Panel
-  height: 130
+  height: 175
 
   Label
     id: title
@@ -64,9 +64,79 @@ Panel
       height: 20
       margin-left: 5
 
+    Label
+      id: colorPreview
+      anchors.left: prev.right
+      anchors.verticalCenter: parent.verticalCenter
+      text:  ##
+      font: verdana-11px-rounded
+      width: 25
+      margin-left: 3
+
+  Panel
+    id: presetRow
+    anchors.top: colorRow.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 22
+    margin-top: 3
+
+    Button
+      id: c1
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: Azul
+      width: 38
+      height: 18
+
+    Button
+      id: c2
+      anchors.left: prev.right
+      anchors.verticalCenter: parent.verticalCenter
+      text: Verm
+      width: 38
+      height: 18
+      margin-left: 2
+
+    Button
+      id: c3
+      anchors.left: prev.right
+      anchors.verticalCenter: parent.verticalCenter
+      text: Verde
+      width: 38
+      height: 18
+      margin-left: 2
+
+    Button
+      id: c4
+      anchors.left: prev.right
+      anchors.verticalCenter: parent.verticalCenter
+      text: Rosa
+      width: 38
+      height: 18
+      margin-left: 2
+
+    Button
+      id: c5
+      anchors.left: prev.right
+      anchors.verticalCenter: parent.verticalCenter
+      text: Roxo
+      width: 38
+      height: 18
+      margin-left: 2
+
+    Button
+      id: c6
+      anchors.left: prev.right
+      anchors.verticalCenter: parent.verticalCenter
+      text: Ouro
+      width: 38
+      height: 18
+      margin-left: 2
+
   BotSwitch
     id: switchButtons
-    anchors.top: colorRow.bottom
+    anchors.top: presetRow.bottom
     anchors.left: parent.left
     anchors.right: parent.right
     text: Estilizar Botoes
@@ -103,10 +173,30 @@ Panel
 ]])
 
 vcUI.colorRow.colorInput:setText(corText)
+vcUI.colorRow.colorInput:setColor(corText)
+vcUI.colorRow.colorPreview:setColor(corText)
 vcUI.switchButtons:setOn(storage.visualCustom.styleButtons)
 vcUI.switchTabs:setOn(storage.visualCustom.styleTabs)
 vcUI.switchSeparators:setOn(storage.visualCustom.hideSeparators)
 vcUI.switchMacros:setOn(storage.visualCustom.styleMacros)
+
+-- Preset colors
+local colorPresets = {
+    { id = "c1", color = "#00AAFF" },  -- Azul
+    { id = "c2", color = "#FF3333" },  -- Vermelho
+    { id = "c3", color = "#00FF88" },  -- Verde
+    { id = "c4", color = "#FF69B4" },  -- Rosa
+    { id = "c5", color = "#AA44FF" },  -- Roxo
+    { id = "c6", color = "#FFD700" },  -- Ouro
+}
+
+-- Set preset button colors
+for _, preset in ipairs(colorPresets) do
+    local btn = vcUI.presetRow[preset.id]
+    if btn then
+        btn:setColor(preset.color)
+    end
+end
 
 -- =============================================
 -- Apply functions
@@ -229,7 +319,7 @@ function applyMacrosBorder()
             rootW:setImageSource()
             rootW:setColor(rootW:isOn() and corText or "white")
             rootW.onMousePress = function(widget, mousePos, mouseButton)
-                macro(200, function()
+                schedule(200, function()
                     widget:setColor(widget:isOn() and corText or "white")
                 end)
             end
@@ -250,23 +340,43 @@ local function applyAllVisuals()
 end
 
 -- =============================================
+-- Color change function (used by Apply + presets)
+-- =============================================
+
+local function changeColor(newColor)
+    if not newColor or newColor:len() < 4 then return end
+    corText = newColor
+    storage.visualCustom.corText = newColor
+    vcUI.colorRow.colorInput:setText(newColor)
+    vcUI.colorRow.colorInput:setColor(newColor)
+    vcUI.colorRow.colorPreview:setColor(newColor)
+    applyAllVisuals()
+    if storage.visualCustom.styleMacros then
+        schedule(300, function()
+            applyMacrosBorder()
+        end)
+    end
+    schedule(400, function()
+        applyTransparentBotButtons()
+    end)
+end
+
+-- =============================================
 -- UI Event handlers
 -- =============================================
 
 vcUI.colorRow.applyColor.onClick = function()
     local newColor = vcUI.colorRow.colorInput:getText()
-    if newColor and newColor:len() >= 4 then
-        corText = newColor
-        storage.visualCustom.corText = newColor
-        applyAllVisuals()
-        if storage.visualCustom.styleMacros then
-            schedule(300, function()
-                applyMacrosBorder()
-            end)
+    changeColor(newColor)
+end
+
+-- Preset buttons
+for _, preset in ipairs(colorPresets) do
+    local btn = vcUI.presetRow[preset.id]
+    if btn then
+        btn.onClick = function()
+            changeColor(preset.color)
         end
-        schedule(400, function()
-            applyTransparentBotButtons()
-        end)
     end
 end
 
@@ -302,4 +412,3 @@ end
 schedule(300, function()
     applyAllVisuals()
 end)
-

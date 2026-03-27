@@ -1289,8 +1289,8 @@ onTalk(function(name, level, mode, text, channelId, tpos)
             if not data.castTimes then data.castTimes = {} end
             table.insert(data.castTimes, now)
 
-            if #data.castTimes >= 3 then
-                -- 3 casts: calcula media dos intervalos
+            if #data.castTimes >= 5 then
+                -- 5 casts: calcula media dos intervalos
                 local intervals = {}
                 for k = 2, #data.castTimes do
                     local elapsed = data.castTimes[k] - data.castTimes[k-1]
@@ -1302,6 +1302,9 @@ onTalk(function(name, level, mode, text, channelId, tpos)
                     local sum = 0
                     for _, v in ipairs(intervals) do sum = sum + v end
                     local avgCd = math.floor(sum / #intervals)
+                    -- Arredonda para o multiplo de 500 mais proximo
+                    avgCd = math.floor((avgCd + 250) / 500) * 500
+                    if avgCd < 500 then avgCd = 500 end
                     local slot = storage.esp_combo_slots[data.slotIndex]
                     if slot and slot.jutsus[data.jutsuIndex] then
                         slot.jutsus[data.jutsuIndex].cooldown = avgCd
@@ -1361,9 +1364,12 @@ if onSpellCooldown then
         -- Se castamos uma spell recentemente para auto CD, captura a duracao
         if (now - autoCdState.lastCastTime) < 1000 then
             for spell, data in pairs(comboAutoCD) do
+                -- Arredonda para o multiplo de 500 mais proximo
+                local roundedDuration = math.floor((duration + 250) / 500) * 500
+                if roundedDuration < 500 then roundedDuration = 500 end
                 local slot = storage.esp_combo_slots[data.slotIndex]
                 if slot and slot.jutsus[data.jutsuIndex] then
-                    slot.jutsus[data.jutsuIndex].cooldown = duration
+                    slot.jutsus[data.jutsuIndex].cooldown = roundedDuration
                 end
                 comboAutoCD[spell] = nil
                 autoCdState.detectedByEvent = true
@@ -1411,21 +1417,27 @@ function autoCdAdvance()
   local spellLower = jutsu.text:trim():lower()
   comboAutoCD = {} -- limpa spells anteriores
   autoCdState.detectedByEvent = false
-  comboAutoCD[spellLower] = {
-    castTimes = {},
-    spellText = jutsu.text:trim(),
-    slotIndex = autoCdState.slotIndex,
-    jutsuIndex = autoCdState.jutsuIndex
-  }
 
   if autoCdState.btn and not autoCdState.btn:isDestroyed() then
     autoCdState.btn:setText("Testando " .. autoCdState.jutsuIndex .. "/" .. #slot.jutsus .. "...")
   end
 
-  -- Primeiro cast
-  say(jutsu.text:trim())
-  autoCdState.lastCastTime = now
-  comboAutoCD[spellLower].firstCastTime = now
+  -- Delay de 1 segundo entre skills para evitar conflitos
+  local delayMs = (autoCdState.jutsuIndex > 1) and 1000 or 0
+  schedule(delayMs, function()
+    if not autoCdState.active then return end
+    comboAutoCD[spellLower] = {
+      castTimes = {},
+      spellText = jutsu.text:trim(),
+      slotIndex = autoCdState.slotIndex,
+      jutsuIndex = autoCdState.jutsuIndex
+    }
+
+    -- Primeiro cast
+    say(jutsu.text:trim())
+    autoCdState.lastCastTime = now
+    comboAutoCD[spellLower].firstCastTime = now
+  end)
 
   -- Timeout por jutsu (30s para dar tempo de detectar)
   local currentIdx = autoCdState.jutsuIndex
@@ -1434,9 +1446,12 @@ function autoCdAdvance()
       -- Timeout: usa serverCd como fallback se disponivel
       local data = comboAutoCD[spellLower]
       if data and data.serverCd then
+        -- Arredonda para o multiplo de 500 mais proximo
+        local roundedCd = math.floor((data.serverCd + 250) / 500) * 500
+        if roundedCd < 500 then roundedCd = 500 end
         local slot = storage.esp_combo_slots[data.slotIndex]
         if slot and slot.jutsus[data.jutsuIndex] then
-          slot.jutsus[data.jutsuIndex].cooldown = data.serverCd
+          slot.jutsus[data.jutsuIndex].cooldown = roundedCd
         end
       end
       comboAutoCD[spellLower] = nil
@@ -1679,20 +1694,20 @@ end
 updateComboSelect()
 refreshCombos()
 
--- ===== Macro: executa jutsus do combo selecionado sequencialmente =====
-EspComboMacro = macro(100, "Combo Especial", function()
+-- ===== Macro: executa jutsus do combo selecionado - maximo dano =====
+EspComboMacro = macro(50, "Combo Especial", function()
   if g_game.isAttacking() then
     local sel = storage.esp_combo_selected
     local slot = storage.esp_combo_slots[sel]
     if not slot then return end
+    if not comboCooldownEnd[sel] then comboCooldownEnd[sel] = {} end
+    -- Lanca TODAS as skills disponiveis (fora de cooldown) neste tick
     for i, jutsu in ipairs(slot.jutsus) do
       if jutsu.text and jutsu.text:len() > 0 then
-        local cdEnd = (comboCooldownEnd[sel] and comboCooldownEnd[sel][i]) or 0
+        local cdEnd = comboCooldownEnd[sel][i] or 0
         if now >= cdEnd then
           say(jutsu.text)
-          if not comboCooldownEnd[sel] then comboCooldownEnd[sel] = {} end
           comboCooldownEnd[sel][i] = now + (jutsu.cooldown or 1000)
-          return
         end
       end
     end

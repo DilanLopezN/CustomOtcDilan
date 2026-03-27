@@ -1286,20 +1286,29 @@ onTalk(function(name, level, mode, text, channelId, tpos)
     local textLower = text:trim():lower()
     for spell, data in pairs(comboAutoCD) do
         if textLower == spell then
-            if data.firstCastTime then
-                -- Segundo cast bem-sucedido: CD = tempo entre primeiro e segundo cast
-                local elapsed = now - data.firstCastTime
-                if elapsed > (autoCdState.retryInterval + 100) then
+            if not data.castTimes then data.castTimes = {} end
+            table.insert(data.castTimes, now)
+
+            if #data.castTimes >= 3 then
+                -- 3 casts: calcula media dos intervalos
+                local intervals = {}
+                for k = 2, #data.castTimes do
+                    local elapsed = data.castTimes[k] - data.castTimes[k-1]
+                    if elapsed > (autoCdState.retryInterval + 100) then
+                        table.insert(intervals, elapsed)
+                    end
+                end
+                if #intervals > 0 then
+                    local sum = 0
+                    for _, v in ipairs(intervals) do sum = sum + v end
+                    local avgCd = math.floor(sum / #intervals)
                     local slot = storage.esp_combo_slots[data.slotIndex]
                     if slot and slot.jutsus[data.jutsuIndex] then
-                        slot.jutsus[data.jutsuIndex].cooldown = elapsed
+                        slot.jutsus[data.jutsuIndex].cooldown = avgCd
                     end
-                    comboAutoCD[spell] = nil
-                    autoCdAdvance()
                 end
-            else
-                -- Primeiro cast bem-sucedido: registra o tempo
-                data.firstCastTime = now
+                comboAutoCD[spell] = nil
+                autoCdAdvance()
             end
         end
     end
@@ -1318,26 +1327,25 @@ onTextMessage(function(mode, text)
         or textLower:match("(%d+%.?%d*) segundo")
     if seconds then
         seconds = tonumber(seconds)
-        if seconds and seconds > 0 then
+        if seconds and seconds > 0 and (now - autoCdState.lastCastTime) < 2000 then
             for spell, data in pairs(comboAutoCD) do
-                -- Aceita tanto com firstCastTime quanto sem (caso o primeiro cast ja estava em CD)
-                local slot = storage.esp_combo_slots[data.slotIndex]
-                if slot and slot.jutsus[data.jutsuIndex] then
-                    slot.jutsus[data.jutsuIndex].cooldown = math.floor(seconds * 1000)
+                -- Apenas registra como dado extra, nao avanca imediatamente
+                -- Deixa o onTalk com 3 casts confirmar o CD real
+                if not data.castTimes or #data.castTimes == 0 then
+                    -- Se ainda nao teve nenhum cast bem-sucedido, usa a mensagem do servidor como fallback
+                    -- mas aguarda mais tentativas
+                    data.serverCd = math.floor(seconds * 1000)
                 end
-                comboAutoCD[spell] = nil
-                autoCdAdvance()
-                return
             end
         end
     end
     -- Detecta mensagem de exhausted sem numero de segundos
     if (now - autoCdState.lastCastTime) < 1000 then
         if textLower:find("exhausted") or textLower:find("exaust") or textLower:find("you cannot") or textLower:find("not ready") or textLower:find("need to wait") then
-            -- Spell falhou por CD, marca que firstCastTime NAO deve ser setado
+            -- Spell falhou por CD, marca castFailed
             -- O retry vai tentar novamente
             for spell, data in pairs(comboAutoCD) do
-                if not data.firstCastTime then
+                if not data.castTimes or #data.castTimes == 0 then
                     data.castFailed = true
                 end
             end
@@ -1404,7 +1412,7 @@ function autoCdAdvance()
   comboAutoCD = {} -- limpa spells anteriores
   autoCdState.detectedByEvent = false
   comboAutoCD[spellLower] = {
-    firstCastTime = nil,
+    castTimes = {},
     spellText = jutsu.text:trim(),
     slotIndex = autoCdState.slotIndex,
     jutsuIndex = autoCdState.jutsuIndex
@@ -1422,6 +1430,14 @@ function autoCdAdvance()
   local currentIdx = autoCdState.jutsuIndex
   schedule(30000, function()
     if autoCdState.active and autoCdState.jutsuIndex == currentIdx then
+      -- Timeout: usa serverCd como fallback se disponivel
+      local data = comboAutoCD[spellLower]
+      if data and data.serverCd then
+        local slot = storage.esp_combo_slots[data.slotIndex]
+        if slot and slot.jutsus[data.jutsuIndex] then
+          slot.jutsus[data.jutsuIndex].cooldown = data.serverCd
+        end
+      end
       comboAutoCD[spellLower] = nil
       autoCdAdvance()
     end
@@ -4177,6 +4193,30 @@ end
 
 UI.Separator()
 
+-- ===== Macro de dano total acumulado =====
+local StopExecution = 0
+local ExecutionTime = 5
+local TotalDamage = 0
+
+onTextMessage(function(Mode, Text)
+    if string.find(Text, "due to your attack") then
+        local Damage = tonumber(string.match(Text, "%d+"))
+        if Damage then
+            TotalDamage = TotalDamage + Damage
+            if StopExecution == 0 then
+                StopExecution = now + (ExecutionTime * 1000)
+            end
+        end
+    end
+end)
+
+macro(500, function()
+    if StopExecution > 0 and now >= StopExecution then
+        say("Dano total acumulado: " .. TotalDamage .. " em " .. ExecutionTime .. " segundos.")
+        StopExecution = 0
+        TotalDamage = 0
+    end
+end)
 
 -- Aumentar largura do painel do bot para caber mais tabs
 schedule(100, function()

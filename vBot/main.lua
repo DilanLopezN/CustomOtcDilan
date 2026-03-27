@@ -1275,20 +1275,21 @@ UI.Separator(combosContent)
 
 -- ===== Sistema de auto-deteccao de cooldown (casting repetido) =====
 local comboAutoCD = {}
-local autoCdState = { active = false, slotIndex = 0, jutsuIndex = 0, btn = nil, lastCastTime = 0, retryInterval = 500 }
+local autoCdState = { active = false, slotIndex = 0, jutsuIndex = 0, btn = nil, lastCastTime = 0, retryInterval = 200, detectedByEvent = false }
 
 -- Detecta quando o proprio jogador fala a spell (cast bem-sucedido)
 onTalk(function(name, level, mode, text, channelId, tpos)
     if not player then return end
     if name ~= player:getName() then return end
     if not autoCdState.active then return end
-    local textLower = text:lower()
+    if autoCdState.detectedByEvent then return end
+    local textLower = text:trim():lower()
     for spell, data in pairs(comboAutoCD) do
         if textLower == spell then
             if data.firstCastTime then
                 -- Segundo cast bem-sucedido: CD = tempo entre primeiro e segundo cast
                 local elapsed = now - data.firstCastTime
-                if elapsed > 200 then
+                if elapsed > (autoCdState.retryInterval + 100) then
                     local slot = storage.esp_combo_slots[data.slotIndex]
                     if slot and slot.jutsus[data.jutsuIndex] then
                         slot.jutsus[data.jutsuIndex].cooldown = elapsed
@@ -1313,29 +1314,66 @@ onTextMessage(function(mode, text)
         or textLower:match("cooldown.-%s(%d+%.?%d*)")
         or textLower:match("aguarde (%d+%.?%d*) segundo")
         or textLower:match("espere (%d+%.?%d*) segundo")
+        or textLower:match("(%d+%.?%d*) second")
+        or textLower:match("(%d+%.?%d*) segundo")
     if seconds then
         seconds = tonumber(seconds)
         if seconds and seconds > 0 then
             for spell, data in pairs(comboAutoCD) do
-                if data.firstCastTime then
-                    local slot = storage.esp_combo_slots[data.slotIndex]
-                    if slot and slot.jutsus[data.jutsuIndex] then
-                        slot.jutsus[data.jutsuIndex].cooldown = math.floor(seconds * 1000)
-                    end
-                    comboAutoCD[spell] = nil
-                    autoCdAdvance()
-                    return
+                -- Aceita tanto com firstCastTime quanto sem (caso o primeiro cast ja estava em CD)
+                local slot = storage.esp_combo_slots[data.slotIndex]
+                if slot and slot.jutsus[data.jutsuIndex] then
+                    slot.jutsus[data.jutsuIndex].cooldown = math.floor(seconds * 1000)
+                end
+                comboAutoCD[spell] = nil
+                autoCdAdvance()
+                return
+            end
+        end
+    end
+    -- Detecta mensagem de exhausted sem numero de segundos
+    if (now - autoCdState.lastCastTime) < 1000 then
+        if textLower:find("exhausted") or textLower:find("exaust") or textLower:find("you cannot") or textLower:find("not ready") or textLower:find("need to wait") then
+            -- Spell falhou por CD, marca que firstCastTime NAO deve ser setado
+            -- O retry vai tentar novamente
+            for spell, data in pairs(comboAutoCD) do
+                if not data.firstCastTime then
+                    data.castFailed = true
                 end
             end
         end
     end
 end)
 
+-- Detecta cooldown via evento do jogo (metodo mais confiavel)
+if onSpellCooldown then
+    onSpellCooldown(function(iconId, duration)
+        if not autoCdState.active then return end
+        if not duration or duration <= 0 then return end
+        -- Se castamos uma spell recentemente para auto CD, captura a duracao
+        if (now - autoCdState.lastCastTime) < 1000 then
+            for spell, data in pairs(comboAutoCD) do
+                local slot = storage.esp_combo_slots[data.slotIndex]
+                if slot and slot.jutsus[data.jutsuIndex] then
+                    slot.jutsus[data.jutsuIndex].cooldown = duration
+                end
+                comboAutoCD[spell] = nil
+                autoCdState.detectedByEvent = true
+                autoCdAdvance()
+                return
+            end
+        end
+    end)
+end
+
 -- Macro que fica repetindo o cast enquanto auto-detecta cooldown
-macro(500, function()
+macro(200, function()
   if not autoCdState.active then return end
+  if autoCdState.detectedByEvent then return end
   for spell, data in pairs(comboAutoCD) do
-    if data.firstCastTime and (now - autoCdState.lastCastTime) >= autoCdState.retryInterval then
+    -- Retenta se: ja fez primeiro cast OU se primeiro cast falhou (castFailed)
+    local shouldRetry = data.firstCastTime or data.castFailed
+    if shouldRetry and (now - autoCdState.lastCastTime) >= autoCdState.retryInterval then
       say(data.spellText)
       autoCdState.lastCastTime = now
       return
@@ -1362,11 +1400,12 @@ function autoCdAdvance()
     return
   end
 
-  local spellLower = jutsu.text:lower()
+  local spellLower = jutsu.text:trim():lower()
   comboAutoCD = {} -- limpa spells anteriores
+  autoCdState.detectedByEvent = false
   comboAutoCD[spellLower] = {
     firstCastTime = nil,
-    spellText = jutsu.text,
+    spellText = jutsu.text:trim(),
     slotIndex = autoCdState.slotIndex,
     jutsuIndex = autoCdState.jutsuIndex
   }
@@ -1376,7 +1415,7 @@ function autoCdAdvance()
   end
 
   -- Primeiro cast
-  say(jutsu.text)
+  say(jutsu.text:trim())
   autoCdState.lastCastTime = now
 
   -- Timeout por jutsu (30s para dar tempo de detectar)
@@ -1391,6 +1430,7 @@ end
 
 function autoCdFinish()
   autoCdState.active = false
+  autoCdState.detectedByEvent = false
   comboAutoCD = {}
   if autoCdState.btn and not autoCdState.btn:isDestroyed() then
     autoCdState.btn:setText("Auto Cooldown")

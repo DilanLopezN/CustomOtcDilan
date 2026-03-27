@@ -27,7 +27,7 @@ local luaFiles = {
   "alarms",
   "Conditions",
   "Equipper",
-  "combo",
+
   "HealBot",
   "ingame_editor",
   "Dropper",

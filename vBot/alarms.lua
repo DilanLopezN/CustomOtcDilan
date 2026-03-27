@@ -1,3 +1,5 @@
+setDefaultTab("Cave")
+
 local panelName = "alarms"
 local ui = setupUI([[
 Panel

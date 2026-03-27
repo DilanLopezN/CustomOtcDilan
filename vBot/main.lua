@@ -1196,94 +1196,50 @@ for s = 1, 5 do
   comboCooldownEnd[s] = {}
 end
 
--- ===== Header: "Selecionar Combo" =====
-local comboHeaderPanel = setupUI([[
+-- ===== Header: "Selecionar Combo" com ComboBox dropdown =====
+local comboSelectPanel = setupUI([[
 Panel
-  height: 22
+  height: 26
+  margin-top: 3
   Label
     id: headerLabel
-    anchors.top: parent.top
     anchors.left: parent.left
     anchors.verticalCenter: parent.verticalCenter
-    text: Selecionar Combo:
+    text: Combo:
     color: red
     font: verdana-11px-rounded
     text-auto-resize: true
-]], combosContent)
-
--- ===== Lista de combos (5 slots) como lista selecionavel =====
-local comboListWidgets = {}
-
-local function updateComboList()
-  for s = 1, 5 do
-    local w = comboListWidgets[s]
-    if w and not w:isDestroyed() then
-      local slot = storage.esp_combo_slots[s]
-      local name = (slot and slot.name and slot.name:len() > 0) and slot.name or ("Combo " .. s)
-      local jutsuCount = (slot and slot.jutsus) and #slot.jutsus or 0
-      w.comboName:setText(name)
-      w.jutsuCount:setText(jutsuCount .. " jutsus")
-      if s == storage.esp_combo_selected then
-        w:setBackgroundColor("#00FF8833")
-        w.comboName:setColor("#00FF88")
-        w.activeLabel:setText("[ATIVO]")
-        w.activeLabel:setColor("#00FF88")
-        w.activeLabel:setVisible(true)
-      else
-        w:setBackgroundColor("#FFFFFF11")
-        w.comboName:setColor("#CCCCCC")
-        w.activeLabel:setVisible(false)
-      end
-    end
-  end
-end
-
-for s = 1, 5 do
-  local entry = setupUI([[
-Panel
-  height: 28
-  margin-top: 2
-  Label
-    id: slotNum
-    anchors.left: parent.left
-    anchors.verticalCenter: parent.verticalCenter
-    text-auto-resize: true
-    color: #888888
-    font: verdana-11px-rounded
-  Label
-    id: comboName
-    anchors.left: slotNum.right
-    anchors.verticalCenter: parent.verticalCenter
-    margin-left: 6
-    text-auto-resize: true
-    font: verdana-11px-rounded
-    color: #CCCCCC
-  Label
-    id: jutsuCount
+  ComboBox
+    id: comboSelect
+    anchors.left: headerLabel.right
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
-    text-auto-resize: true
-    color: #888888
-  Label
-    id: activeLabel
-    anchors.right: jutsuCount.left
-    anchors.verticalCenter: parent.verticalCenter
-    margin-right: 8
-    text-auto-resize: true
-    font: verdana-11px-rounded
-    color: #00FF88
+    margin-left: 8
+    height: 20
 ]], combosContent)
 
-  entry.slotNum:setText(s .. ".")
-  entry:setBackgroundColor("#FFFFFF11")
+local comboSelectSyncing = false
 
-  entry.onClick = function(w)
-    storage.esp_combo_selected = s
-    updateComboList()
-    refreshCombos()
+local function updateComboSelect()
+  comboSelectSyncing = true
+  comboSelectPanel.comboSelect:clearOptions()
+  for s = 1, 5 do
+    local slot = storage.esp_combo_slots[s]
+    local name = (slot and slot.name and slot.name:len() > 0) and slot.name or ("Combo " .. s)
+    local jutsuCount = (slot and slot.jutsus) and #slot.jutsus or 0
+    comboSelectPanel.comboSelect:addOption(s .. ". " .. name .. " (" .. jutsuCount .. " jutsus)")
   end
+  local sel = storage.esp_combo_selected
+  comboSelectPanel.comboSelect:setCurrentIndex(sel)
+  comboSelectSyncing = false
+end
 
-  comboListWidgets[s] = entry
+comboSelectPanel.comboSelect.onOptionChange = function(widget)
+  if comboSelectSyncing then return end
+  local text = widget:getCurrentOption().text
+  local idx = tonumber(text:match("^(%d+)%.")) or 1
+  storage.esp_combo_selected = idx
+  refreshCombos()
 end
 
 UI.Separator(combosContent)
@@ -1312,43 +1268,46 @@ comboNamePanel.nameEdit:setColor("#FFD700")
 comboNamePanel.nameEdit.onTextChange = function(w, text)
   local sel = storage.esp_combo_selected
   storage.esp_combo_slots[sel].name = text
-  updateComboList()
+  updateComboSelect()
 end
 
 UI.Separator(combosContent)
 
--- ===== Sistema de auto-deteccao de cooldown (unico botao sequencial) =====
+-- ===== Sistema de auto-deteccao de cooldown (casting repetido) =====
 local comboAutoCD = {}
-local autoCdState = { active = false, slotIndex = 0, jutsuIndex = 0, btn = nil }
+local autoCdState = { active = false, slotIndex = 0, jutsuIndex = 0, btn = nil, lastCastTime = 0, retryInterval = 500 }
 
+-- Detecta quando o proprio jogador fala a spell (cast bem-sucedido)
 onTalk(function(name, level, mode, text, channelId, tpos)
     if not player then return end
     if name ~= player:getName() then return end
+    if not autoCdState.active then return end
     local textLower = text:lower()
     for spell, data in pairs(comboAutoCD) do
         if textLower == spell then
-            if data.detecting then
-                local elapsed = now - data.castTime
+            if data.firstCastTime then
+                -- Segundo cast bem-sucedido: CD = tempo entre primeiro e segundo cast
+                local elapsed = now - data.firstCastTime
                 if elapsed > 200 then
-                    -- CD detectado: spell conseguiu ser castada novamente
                     local slot = storage.esp_combo_slots[data.slotIndex]
                     if slot and slot.jutsus[data.jutsuIndex] then
                         slot.jutsus[data.jutsuIndex].cooldown = elapsed
                     end
                     comboAutoCD[spell] = nil
-                    -- Avancar para proximo jutsu
                     autoCdAdvance()
                 end
             else
-                data.detecting = true
-                data.castTime = now
+                -- Primeiro cast bem-sucedido: registra o tempo
+                data.firstCastTime = now
             end
         end
     end
 end)
 
+-- Detecta mensagens de cooldown do servidor
 onTextMessage(function(mode, text)
     if not text then return end
+    if not autoCdState.active then return end
     local textLower = text:lower()
     local seconds = textLower:match("wait (%d+%.?%d*) second")
         or textLower:match("cooldown.-%s(%d+%.?%d*)")
@@ -1358,7 +1317,7 @@ onTextMessage(function(mode, text)
         seconds = tonumber(seconds)
         if seconds and seconds > 0 then
             for spell, data in pairs(comboAutoCD) do
-                if data.detecting then
+                if data.firstCastTime then
                     local slot = storage.esp_combo_slots[data.slotIndex]
                     if slot and slot.jutsus[data.jutsuIndex] then
                         slot.jutsus[data.jutsuIndex].cooldown = math.floor(seconds * 1000)
@@ -1370,6 +1329,18 @@ onTextMessage(function(mode, text)
             end
         end
     end
+end)
+
+-- Macro que fica repetindo o cast enquanto auto-detecta cooldown
+macro(500, function()
+  if not autoCdState.active then return end
+  for spell, data in pairs(comboAutoCD) do
+    if data.firstCastTime and (now - autoCdState.lastCastTime) >= autoCdState.retryInterval then
+      say(data.spellText)
+      autoCdState.lastCastTime = now
+      return
+    end
+  end
 end)
 
 -- Funcao que avanca a deteccao sequencial para o proximo jutsu
@@ -1392,9 +1363,10 @@ function autoCdAdvance()
   end
 
   local spellLower = jutsu.text:lower()
+  comboAutoCD = {} -- limpa spells anteriores
   comboAutoCD[spellLower] = {
-    castTime = now,
-    detecting = false,
+    firstCastTime = nil,
+    spellText = jutsu.text,
     slotIndex = autoCdState.slotIndex,
     jutsuIndex = autoCdState.jutsuIndex
   }
@@ -1403,11 +1375,13 @@ function autoCdAdvance()
     autoCdState.btn:setText("Testando " .. autoCdState.jutsuIndex .. "/" .. #slot.jutsus .. "...")
   end
 
+  -- Primeiro cast
   say(jutsu.text)
+  autoCdState.lastCastTime = now
 
-  -- Timeout por jutsu
+  -- Timeout por jutsu (30s para dar tempo de detectar)
   local currentIdx = autoCdState.jutsuIndex
-  schedule(15000, function()
+  schedule(30000, function()
     if autoCdState.active and autoCdState.jutsuIndex == currentIdx then
       comboAutoCD[spellLower] = nil
       autoCdAdvance()
@@ -1417,6 +1391,7 @@ end
 
 function autoCdFinish()
   autoCdState.active = false
+  comboAutoCD = {}
   if autoCdState.btn and not autoCdState.btn:isDestroyed() then
     autoCdState.btn:setText("Auto Cooldown")
     autoCdState.btn:setColor("#00CCFF")
@@ -1543,7 +1518,7 @@ function refreshCombos()
   -- Atualizar nome no campo
   comboNamePanel.nameEdit:setText(slot.name or ("Combo " .. sel))
 
-  updateComboList()
+  updateComboSelect()
 
   -- Criar widgets para cada jutsu do combo selecionado
   for i, jutsuData in ipairs(slot.jutsus) do
@@ -1633,7 +1608,7 @@ Panel
 end
 
 -- Load on start
-updateComboList()
+updateComboSelect()
 refreshCombos()
 
 -- ===== Macro: executa jutsus do combo selecionado sequencialmente =====

@@ -1183,6 +1183,8 @@ for s = 1, 5 do
   end
   for _, j in ipairs(storage.esp_combo_slots[s].jutsus) do
     if not j.cooldown then j.cooldown = 1000 end
+    if not j.damage then j.damage = 0 end
+    if not j.castTime then j.castTime = 0 end
   end
 end
 
@@ -1297,6 +1299,19 @@ onTalk(function(name, level, mode, text, channelId, tpos)
             if not data.castTimes then data.castTimes = {} end
             table.insert(data.castTimes, now)
 
+            -- Medir castTime: tempo entre say() e confirmacao do cast
+            if data.lastSayTime and not data.castTimeValues then
+                data.castTimeValues = {}
+            end
+            if data.lastSayTime then
+                local ct = now - data.lastSayTime
+                if ct >= 0 and ct < 5000 then -- sanidade: max 5s
+                    if not data.castTimeValues then data.castTimeValues = {} end
+                    table.insert(data.castTimeValues, ct)
+                end
+                data.lastSayTime = nil
+            end
+
             if #data.castTimes >= 3 then
                 -- 3 casts: calcula media dos intervalos
                 local intervals = {}
@@ -1315,6 +1330,17 @@ onTalk(function(name, level, mode, text, channelId, tpos)
                     local slot = storage.esp_combo_slots[data.slotIndex]
                     if slot and slot.jutsus[data.jutsuIndex] then
                         slot.jutsus[data.jutsuIndex].cooldown = avgCd
+                    end
+                end
+                -- Salvar castTime medio
+                if data.castTimeValues and #data.castTimeValues > 0 then
+                    local ctSum = 0
+                    for _, v in ipairs(data.castTimeValues) do ctSum = ctSum + v end
+                    local avgCt = math.floor(ctSum / #data.castTimeValues)
+                    avgCt = math.floor((avgCt + 25) / 50) * 50 -- arredondar para 50ms
+                    local slot = storage.esp_combo_slots[data.slotIndex]
+                    if slot and slot.jutsus[data.jutsuIndex] then
+                        slot.jutsus[data.jutsuIndex].castTime = avgCt
                     end
                 end
                 comboAutoCD[spell] = nil
@@ -1404,6 +1430,7 @@ macro(150, function()
       if shouldRetry and (now - autoCdState.lastCastTime) >= autoCdState.retryInterval then
         say(data.spellText)
         autoCdState.lastCastTime = now
+        data.lastSayTime = now
         return
       end
     end
@@ -1527,7 +1554,7 @@ function autoCdStartPhase3()
   autoCdState.phase = 3
   if autoCdState.btn and not autoCdState.btn:isDestroyed() then
     autoCdState.btn:setText("Otimizando...")
-    autoCdState.btn:setColor("#00FF00")
+    autoCdState.btn:setColor("#00FF88")
   end
 
   local slot = storage.esp_combo_slots[autoCdState.slotIndex]
@@ -1540,9 +1567,14 @@ function autoCdStartPhase3()
 
     if hasDamage then
       -- Ordenar por DPS decrescente (maior DPS primeiro)
+      -- DPS real = damage / ((castTime + cooldown) / 1000)
       table.sort(slot.jutsus, function(a, b)
-        local dpsA = (a.damage or 0) / math.max((a.cooldown or 1000) / 1000, 0.1)
-        local dpsB = (b.damage or 0) / math.max((b.cooldown or 1000) / 1000, 0.1)
+        local totalA = ((a.castTime or 0) + (a.cooldown or 1000)) / 1000
+        local totalB = ((b.castTime or 0) + (b.cooldown or 1000)) / 1000
+        if totalA <= 0 then totalA = 0.1 end
+        if totalB <= 0 then totalB = 0.1 end
+        local dpsA = (a.damage or 0) / totalA
+        local dpsB = (b.damage or 0) / totalB
         return dpsA > dpsB
       end)
     else
@@ -1609,6 +1641,7 @@ function autoCdAdvance()
     say(jutsu.text:trim())
     autoCdState.lastCastTime = now
     comboAutoCD[spellLower].firstCastTime = now
+    comboAutoCD[spellLower].lastSayTime = now
   end)
 
   -- Timeout por jutsu (15s)
@@ -1651,6 +1684,7 @@ end
 local function createJutsuWidget(slotIndex, jutsuIndex, jutsuData)
   local dmg = jutsuData.damage or 0
   local cd = jutsuData.cooldown or 1000
+  local ct = jutsuData.castTime or 0
   local hasDmg = dmg > 0
   local panelHeight = hasDmg and 72 or 55
 
@@ -1722,12 +1756,17 @@ Panel
   entry.spellEdit:setText(jutsuData.text or "")
   entry.cdRow.cdEdit:setText(tostring(cd))
 
-  -- Mostrar DMG/DPS se disponivel
+  -- Mostrar DMG/DPS se disponivel (DPS real = damage / ((castTime + cooldown) / 1000))
   if hasDmg then
-    local dps = dmg / math.max(cd / 1000, 0.1)
-    entry.dpsLabel:setText("DMG: " .. dmg .. " | DPS: " .. string.format("%.1f", dps) .. "/s")
+    local totalTime = math.max((ct + cd) / 1000, 0.1)
+    local dps = dmg / totalTime
+    entry.dpsLabel:setText(string.format("DMG: %d | DPS: %.1f/s | Cast: %dms", dmg, dps, ct))
   else
-    entry.dpsLabel:setText("")
+    if ct > 0 then
+      entry.dpsLabel:setText(string.format("Cast: %dms", ct))
+    else
+      entry.dpsLabel:setText("")
+    end
   end
 
   entry.spellEdit:setBackgroundColor("#00000033")
@@ -1817,7 +1856,7 @@ Panel
     local curSel = storage.esp_combo_selected
     local curSlot = storage.esp_combo_slots[curSel]
     if curSlot then
-      table.insert(curSlot.jutsus, { text = "", cooldown = 1000 })
+      table.insert(curSlot.jutsus, { text = "", cooldown = 1000, damage = 0, castTime = 0 })
       refreshCombos()
     end
   end

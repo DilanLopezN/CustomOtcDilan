@@ -1167,7 +1167,7 @@ if type(storage.esp_combo_list) ~= "table" then
     for k = 1, 6 do
       local key = "text" .. k
       if storage.esp_combo[key] and storage.esp_combo[key]:len() > 0 then
-        table.insert(storage.esp_combo_list, { text = storage.esp_combo[key] })
+        table.insert(storage.esp_combo_list, { text = storage.esp_combo[key], cooldown = 1000 })
       end
     end
   else
@@ -1175,13 +1175,77 @@ if type(storage.esp_combo_list) ~= "table" then
   end
 end
 
+-- Migrar dados antigos sem cooldown
+for _, c in ipairs(storage.esp_combo_list) do
+  if not c.cooldown then c.cooldown = 1000 end
+end
+
 local comboWidgets = {}
+local comboCooldownEnd = {} -- [index] = timestamp quando CD termina
+
+-- Sistema de auto-deteccao de cooldown
+local comboAutoCD = {} -- [spell_lower] = { castTime, waitingIndex }
+
+-- Listener para detectar cooldown automaticamente
+-- Quando o jogador fala a spell, registra o tempo
+-- Quando tenta de novo e recebe mensagem de erro, calcula o CD
+onTalk(function(name, level, mode, text, channelId, tpos)
+    if not player then return end
+    if name ~= player:getName() then return end
+    local textLower = text:lower()
+    for i, combo in ipairs(storage.esp_combo_list) do
+        if combo.text and combo.text:len() > 0 then
+            if textLower == combo.text:lower() then
+                if comboAutoCD[textLower] and comboAutoCD[textLower].detecting then
+                    -- Segunda vez que conseguiu castar = CD detectado
+                    local elapsed = now - comboAutoCD[textLower].castTime
+                    if elapsed > 200 then
+                        combo.cooldown = elapsed
+                        comboAutoCD[textLower] = nil
+                        refreshCombos()
+                    end
+                else
+                    comboAutoCD[textLower] = { castTime = now, detecting = false }
+                end
+            end
+        end
+    end
+end)
+
+-- Listener para mensagens de erro de cooldown do servidor
+onTextMessage(function(mode, text)
+    if not text then return end
+    local textLower = text:lower()
+    -- Detecta mensagens como "You need to wait X seconds" ou "Cooldown: X"
+    local seconds = textLower:match("wait (%d+%.?%d*) second")
+        or textLower:match("cooldown.-%s(%d+%.?%d*)")
+        or textLower:match("aguarde (%d+%.?%d*) segundo")
+        or textLower:match("espere (%d+%.?%d*) segundo")
+    if seconds then
+        seconds = tonumber(seconds)
+        if seconds and seconds > 0 then
+            -- Aplica ao combo que esta em deteccao
+            for spell, data in pairs(comboAutoCD) do
+                if data.detecting then
+                    for i, combo in ipairs(storage.esp_combo_list) do
+                        if combo.text and combo.text:lower() == spell then
+                            combo.cooldown = math.floor(seconds * 1000)
+                            comboAutoCD[spell] = nil
+                            refreshCombos()
+                            return
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
 
 -- Funcao para criar widget de um combo
 local function createComboWidget(index, comboData)
   local entry = setupUI([[
 Panel
-  height: 54
+  height: 100
   margin-top: 3
 
   Label
@@ -1209,20 +1273,86 @@ Panel
     height: 22
     margin-top: 3
 
+  Panel
+    id: cdRow
+    anchors.top: spellEdit.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 3
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: CD (ms):
+      color: #AADDFF
+      text-auto-resize: true
+    TextEdit
+      id: cdEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 70
+
+  Button
+    id: autoCdBtn
+    anchors.top: cdRow.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 22
+    margin-top: 2
+    text: Auto Cooldown
+    color: #00CCFF
+
   ]], combosContent)
 
   entry.title:setText("Combo #" .. index)
   entry.spellEdit:setText(comboData.text or "")
+  entry.cdRow.cdEdit:setText(tostring(comboData.cooldown or 1000))
 
   -- Estilo: fundo transparente e texto neon azul
   entry.spellEdit:setBackgroundColor("#00000033")
   entry.spellEdit:setColor("#00DDFF")
+  entry.cdRow.cdEdit:setBackgroundColor("#00000033")
+  entry.cdRow.cdEdit:setColor("#00DDFF")
 
   entry.spellEdit.onTextChange = function(w, text)
     storage.esp_combo_list[index].text = text
   end
 
+  entry.cdRow.cdEdit.onTextChange = function(w, text)
+    local val = tonumber(text) or 1000
+    if val < 0 then val = 0 end
+    storage.esp_combo_list[index].cooldown = val
+  end
+
+  -- Botao auto cooldown: ativa deteccao
+  entry.autoCdBtn.onClick = function(w)
+    local spell = comboData.text
+    if not spell or spell:len() == 0 then return end
+    local spellLower = spell:lower()
+    comboAutoCD[spellLower] = { castTime = now, detecting = true }
+    w:setText("Detectando...")
+    w:setColor("#FFFF00")
+    -- Tenta castar a spell para iniciar deteccao
+    say(spell)
+    -- Timeout: reseta apos 15 segundos se nao detectou
+    schedule(15000, function()
+      if comboAutoCD[spellLower] then
+        comboAutoCD[spellLower] = nil
+        if w and not w:isDestroyed() then
+          w:setText("Auto Cooldown")
+          w:setColor("#00CCFF")
+        end
+      end
+    end)
+  end
+
+  entry.spellEdit:setTooltip("Spell do combo (ex: exori gran)")
+  entry.cdRow.cdEdit:setTooltip("Cooldown em milissegundos (500 = 0.5s, 1000 = 1s, 2000 = 2s)")
+  entry.autoCdBtn:setTooltip("Clique para detectar automaticamente o cooldown da magia")
+
   entry.removeBtn.onClick = function(w)
+    comboCooldownEnd[index] = nil
     table.remove(storage.esp_combo_list, index)
     refreshCombos()
   end
@@ -1259,7 +1389,8 @@ Panel
 addComboBtn.addCombo.onClick = function(w)
   local newIndex = #storage.esp_combo_list + 1
   table.insert(storage.esp_combo_list, {
-    text = "magia " .. newIndex
+    text = "magia " .. newIndex,
+    cooldown = 1000
   })
   refreshCombos()
 end
@@ -1285,12 +1416,17 @@ okCombosBtn.okBtn.onClick = function()
   saveEspeciaisProfile()
 end
 
--- Macro de combo
-EspComboMacro = macro(200, "Combo Especial", function()
+-- Macro de combo com cooldown individual
+EspComboMacro = macro(100, "Combo Especial", function()
   if g_game.isAttacking() then
-    for _, combo in ipairs(storage.esp_combo_list) do
+    for i, combo in ipairs(storage.esp_combo_list) do
       if combo.text and combo.text:len() > 0 then
-        say(combo.text)
+        local cdEnd = comboCooldownEnd[i] or 0
+        if now >= cdEnd then
+          say(combo.text)
+          comboCooldownEnd[i] = now + (combo.cooldown or 1000)
+          return -- Usa um combo por vez respeitando o cooldown
+        end
       end
     end
   end
@@ -2455,97 +2591,78 @@ local function getAttackingCreature()
     return g_game.getAttackingCreature()
 end
 
--- Funcao para calcular posicao de uso (tile adjacente)
-local function getUsePosition(targetPos)
-    local playerPos = player:getPosition()
-    local tPos = {x = targetPos.x, y = targetPos.y, z = targetPos.z}
-    local distance = {
-        x = math.abs(playerPos.x - tPos.x),
-        y = math.abs(playerPos.y - tPos.y)
-    }
-    if distance.y >= distance.x then
-        if tPos.y > playerPos.y or
-           (tPos.y < playerPos.y and tPos.x < playerPos.x) or
-           (tPos.y < playerPos.y and tPos.x > playerPos.x) then
-            tPos.x = tPos.x + 1
-        elseif tPos.x > playerPos.x or
-               (tPos.x < playerPos.x and tPos.y > playerPos.y) or
-               (tPos.x > playerPos.y and tPos.x < playerPos.x) then
-            tPos.x = tPos.x - 1
-        end
-    else
-        if tPos.x < playerPos.x or
-           tPos.y > playerPos.y or
-           (tPos.x > playerPos.x and tPos.y > playerPos.y) then
-            tPos.y = tPos.y + 1
-        elseif tPos.y < playerPos.y or
-               (tPos.y > playerPos.y and tPos.x > playerPos.x) or
-               (tPos.x < playerPos.x and tPos.y < playerPos.y) then
-            tPos.y = tPos.y - 1
-        end
-    end
-    return tPos
-end
-
 -- Funcao canUseReta - verifica se pode usar reta no alvo
-local function canUseReta(creature)
+local function canUseReta(creature, maxDist)
     local creaturePos = creature:getPosition()
-    if not creaturePos then return end
+    if not creaturePos then return false end
 
     local playerPos = pos()
-    local distance = getDistanceBetween(playerPos, creaturePos)
-    local lowest = getLowestBetween(playerPos, creaturePos)
+    if playerPos.z ~= creaturePos.z then return false end
 
-    -- Cenario 1: Em linha reta, dist 1-4
-    if distance > 0 and distance <= 4 and lowest == 0 then
-        local direction = correctDirection()
-        if playerPos.x > creaturePos.x then
-            turn(DIR_WEST)
-            return direction == DIR_WEST
-        elseif playerPos.x < creaturePos.x then
-            turn(DIR_EAST)
-            return direction == DIR_EAST
-        elseif playerPos.y > creaturePos.y then
-            turn(DIR_NORTH)
-            return direction == DIR_NORTH
-        elseif playerPos.y < creaturePos.y then
-            turn(DIR_SOUTH)
-            return direction == DIR_SOUTH
+    local dx = creaturePos.x - playerPos.x
+    local dy = creaturePos.y - playerPos.y
+    local adx = math.abs(dx)
+    local ady = math.abs(dy)
+
+    maxDist = maxDist or 4
+
+    -- Mesma posicao, nao faz nada
+    if adx == 0 and ady == 0 then return false end
+
+    -- Cenario 1: Ja esta em linha reta e dentro da distancia
+    if adx == 0 and ady <= maxDist then
+        -- Linha vertical
+        local targetDir = dy > 0 and 2 or 0  -- SUL ou NORTE
+        local currentDir = correctDirection()
+        if currentDir == targetDir then
+            return true
+        else
+            turn(targetDir)
+            return false
         end
+    elseif ady == 0 and adx <= maxDist then
+        -- Linha horizontal
+        local targetDir = dx > 0 and 1 or 3  -- LESTE ou OESTE
+        local currentDir = correctDirection()
+        if currentDir == targetDir then
+            return true
+        else
+            turn(targetDir)
+            return false
+        end
+    end
 
-    -- Cenario 2: Muito perto mas nao em linha reta (diagonal)
-    elseif distance <= 1 then
-        if lowest ~= 0 or distance == 0 then
-            local closestPos
-            for _, dir in ipairs(retasDirections) do
-                local adjPos = {
-                    x = creaturePos.x + dir.x,
-                    y = creaturePos.y + dir.y,
-                    z = creaturePos.z
-                }
-                if not closestPos or
-                   preciseDistance(adjPos, playerPos) < preciseDistance(closestPos, playerPos) then
+    -- Cenario 2: Nao esta em linha reta, tenta alinhar caminhando
+    if adx <= 2 and ady <= 2 then
+        local bestPos = nil
+        local bestDist = 999
+        for _, d in ipairs(retasDirections) do
+            local adjPos = {
+                x = creaturePos.x + d.x,
+                y = creaturePos.y + d.y,
+                z = creaturePos.z
+            }
+            -- Verifica se a posicao adjacente esta em linha com o alvo
+            local ddx = math.abs(adjPos.x - creaturePos.x)
+            local ddy = math.abs(adjPos.y - creaturePos.y)
+            if (ddx == 0 or ddy == 0) then
+                local dist = preciseDistance(adjPos, playerPos)
+                if dist < bestDist then
                     local tile = g_map.getTile(adjPos)
-                    if tile and tile:isWalkable() and tile:isPathable() then
-                        closestPos = adjPos
+                    if tile and tile:isWalkable() then
+                        bestPos = adjPos
+                        bestDist = dist
                     end
                 end
             end
-            if closestPos then
-                player:autoWalk(closestPos)
-                retasDelayEnd = now + 300
-                return
-            end
         end
-
-    -- Cenario 3: Longe demais, usa tile adjacente
-    else
-        local usePos = getUsePosition(creaturePos)
-        if not usePos then return end
-        local tile = g_map.getTile(usePos)
-        if not tile then return end
-        g_game.use(tile:getTopThing())
+        if bestPos then
+            player:autoWalk(bestPos)
+            retasDelayEnd = now + 400
+        end
     end
+
+    return false
 end
 
 -- Widget de cooldowns na tela para Retas
@@ -2617,6 +2734,13 @@ EspRetasMacro = macro(100, "Retas Esp", function()
     local target = getAttackingCreature()
     if not target then return end
 
+    -- Auto-ativar Turn target quando tem retas configuradas
+    if Turn and Turn.macro and Turn.macro.isOff and Turn.macro.isOff() then
+        if #storage.esp_retas_list > 0 then
+            Turn.macro.setOn()
+        end
+    end
+
     for _, ret in ipairs(storage.esp_retas_list) do
         if ret.spell and ret.spell ~= "" then
             local uid = ret.uid
@@ -2632,7 +2756,8 @@ EspRetasMacro = macro(100, "Retas Esp", function()
                     local hpLimit = ret.hpPercent or 100
                     local targetHp = target:getHealthPercent()
                     if targetHp and targetHp <= hpLimit then
-                        if canUseReta(target) then
+                        local maxDist = ret.distance or 4
+                        if canUseReta(target, maxDist) then
                             say(ret.spell)
                             retasCooldownEnd[uid] = now + ((ret.cd or 2) * 1000)
                             return

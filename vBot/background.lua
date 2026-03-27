@@ -38,7 +38,7 @@ end
 
 local bgUI = setupUI([[
 Panel
-  height: 290
+  height: 260
 
   Label
     id: title
@@ -180,44 +180,9 @@ Panel
       width: 55
       height: 20
 
-  Panel
-    id: bgColorPanel
-    anchors.top: targetPanel.bottom
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 25
-    margin-top: 5
-
-    Label
-      id: bgColorLabel
-      anchors.left: parent.left
-      anchors.verticalCenter: parent.verticalCenter
-      text: Cor Fundo:
-      font: verdana-11px-rounded
-      color: white
-      width: 65
-
-    TextEdit
-      id: bgColorInput
-      anchors.left: prev.right
-      anchors.verticalCenter: parent.verticalCenter
-      width: 75
-      height: 20
-      margin-left: 3
-      font: verdana-11px-rounded
-
-    Button
-      id: bgColorApply
-      anchors.left: prev.right
-      anchors.verticalCenter: parent.verticalCenter
-      text: Aplicar
-      width: 50
-      height: 20
-      margin-left: 5
-
   Label
     id: currentBG
-    anchors.top: bgColorPanel.bottom
+    anchors.top: targetPanel.bottom
     anchors.left: parent.left
     anchors.right: parent.right
     text: --
@@ -400,25 +365,6 @@ bgUI.targetPanel.applyContents.onClick = function(widget)
     end
     if storage.bgPlayer.currentBG then
         applyBG(storage.bgPlayer.currentBG)
-    end
-end
-
--- Background color input
-bgUI.bgColorPanel.bgColorInput:setText(storage.bgPlayer.bgColor or "#000000")
-
-bgUI.bgColorPanel.bgColorApply.onClick = function()
-    local newColor = bgUI.bgColorPanel.bgColorInput:getText()
-    if newColor and newColor:len() >= 4 then
-        storage.bgPlayer.bgColor = newColor
-        if storage.bgPlayer.currentBG then
-            applyBG(storage.bgPlayer.currentBG)
-        else
-            -- Aplica cor de fundo mesmo sem imagem
-            if storage.bgPlayer.applyWindow then
-                modules.game_bot.botWindow:setBackgroundColor(newColor)
-            end
-        end
-        bgUI.bgColorPanel.bgColorInput:setColor(newColor)
     end
 end
 

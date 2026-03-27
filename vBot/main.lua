@@ -109,7 +109,8 @@ local function saveEspeciaisProfile()
       data.esp_fugas_widgets_show = deepCopyJson(storage.esp_fugas_widgets_show or {})
       data.esp_fugas_widgets_pos = deepCopyJson(storage.esp_fugas_widgets_pos or {})
       data.esp_trap_list = deepCopyJson(storage.esp_trap_list or {})
-      data.esp_combo_list = deepCopyJson(storage.esp_combo_list or {})
+      data.esp_combo_slots = deepCopyJson(storage.esp_combo_slots or {})
+      data.esp_combo_selected = storage.esp_combo_selected or 1
       data.esp_buffs_list = deepCopyJson(storage.esp_buffs_list or {})
       data.esp_ataque_list = deepCopyJson(storage.esp_ataque_list or {})
       data.esp_stack_list = deepCopyJson(storage.esp_stack_list or {})
@@ -1150,73 +1151,163 @@ end, trapsContent)
 
 
 -- =============================================
--- TAB: COMBOS (dinamico - adicionar/remover)
+-- TAB: COMBOS (5 slots, cada combo = lista de jutsus)
 -- =============================================
 EspTabBar:addTab("Combos", espPanel3)
 local combosContent = espPanel3.scrollArea
         UI.Separator(combosContent)
-        color= UI.Label("Combo de Ataque:",combosContent)
-color:setColor("red")
-        UI.Separator(combosContent)
 
--- Storage: lista de combos
-if type(storage.esp_combo_list) ~= "table" then
-  -- Migrar do formato antigo se existir
-  if storage.esp_combo then
-    storage.esp_combo_list = {}
-    for k = 1, 6 do
-      local key = "text" .. k
-      if storage.esp_combo[key] and storage.esp_combo[key]:len() > 0 then
-        table.insert(storage.esp_combo_list, { text = storage.esp_combo[key], cooldown = 1000 })
+-- ===== Storage: 5 combo slots =====
+if type(storage.esp_combo_slots) ~= "table" then
+  -- Migrar do formato antigo (esp_combo_list) se existir
+  storage.esp_combo_slots = {}
+  for s = 1, 5 do
+    storage.esp_combo_slots[s] = { name = "Combo " .. s, jutsus = {} }
+  end
+  if type(storage.esp_combo_list) == "table" and #storage.esp_combo_list > 0 then
+    -- Migrar jutsus antigos para o slot 1
+    for _, old in ipairs(storage.esp_combo_list) do
+      if old.text and old.text:len() > 0 then
+        table.insert(storage.esp_combo_slots[1].jutsus, { text = old.text, cooldown = old.cooldown or 1000 })
       end
     end
-  else
-    storage.esp_combo_list = {}
+  end
+end
+-- Garantir que sempre existam 5 slots
+for s = 1, 5 do
+  if not storage.esp_combo_slots[s] then
+    storage.esp_combo_slots[s] = { name = "Combo " .. s, jutsus = {} }
+  end
+  if type(storage.esp_combo_slots[s].jutsus) ~= "table" then
+    storage.esp_combo_slots[s].jutsus = {}
+  end
+  for _, j in ipairs(storage.esp_combo_slots[s].jutsus) do
+    if not j.cooldown then j.cooldown = 1000 end
   end
 end
 
--- Migrar dados antigos sem cooldown
-for _, c in ipairs(storage.esp_combo_list) do
-  if not c.cooldown then c.cooldown = 1000 end
+if type(storage.esp_combo_selected) ~= "number" or storage.esp_combo_selected < 1 or storage.esp_combo_selected > 5 then
+  storage.esp_combo_selected = 1
 end
 
 local comboWidgets = {}
-local comboCooldownEnd = {} -- [index] = timestamp quando CD termina
+local comboCooldownEnd = {} -- [slotIndex][jutsuIndex] = timestamp
+for s = 1, 5 do
+  comboCooldownEnd[s] = {}
+end
 
--- Sistema de auto-deteccao de cooldown
-local comboAutoCD = {} -- [spell_lower] = { castTime, waitingIndex }
+-- ===== Header: "Combo de Ataque" + 5 slot buttons =====
+local comboHeaderPanel = setupUI([[
+Panel
+  height: 22
+  Label
+    id: headerLabel
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.verticalCenter: parent.verticalCenter
+    text: Combo de Ataque:
+    color: red
+    font: verdana-11px-rounded
+    text-auto-resize: true
+]], combosContent)
 
--- Listener para detectar cooldown automaticamente
--- Quando o jogador fala a spell, registra o tempo
--- Quando tenta de novo e recebe mensagem de erro, calcula o CD
+local comboSlotBtns = {}
+local comboSlotPanel = setupUI([[
+Panel
+  height: 26
+  margin-top: 2
+]], combosContent)
+
+for s = 1, 5 do
+  local btnWidth = 40
+  local btnMargin = 3
+  local btn = setupUI([[
+Button
+  id: slotBtn]] .. s .. [[
+
+  height: 24
+  width: ]] .. btnWidth .. [[
+
+  text: ]] .. s .. [[
+
+]], comboSlotPanel)
+  btn:setMarginLeft((s - 1) * (btnWidth + btnMargin))
+  comboSlotBtns[s] = btn
+end
+
+local function updateSlotBtnColors()
+  for s = 1, 5 do
+    if s == storage.esp_combo_selected then
+      comboSlotBtns[s]:setColor("#00FF88")
+    else
+      comboSlotBtns[s]:setColor("#AAAAAA")
+    end
+  end
+end
+
+UI.Separator(combosContent)
+
+-- ===== Combo name edit =====
+local comboNamePanel = setupUI([[
+Panel
+  height: 24
+  margin-top: 2
+  Label
+    anchors.left: parent.left
+    anchors.verticalCenter: parent.verticalCenter
+    text: Nome:
+    color: #AADDFF
+    text-auto-resize: true
+  TextEdit
+    id: nameEdit
+    anchors.right: parent.right
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    width: 150
+]], combosContent)
+comboNamePanel.nameEdit:setBackgroundColor("#00000033")
+comboNamePanel.nameEdit:setColor("#FFD700")
+
+comboNamePanel.nameEdit.onTextChange = function(w, text)
+  local sel = storage.esp_combo_selected
+  storage.esp_combo_slots[sel].name = text
+end
+
+UI.Separator(combosContent)
+
+-- ===== Sistema de auto-deteccao de cooldown (unico botao sequencial) =====
+local comboAutoCD = {}
+local autoCdState = { active = false, slotIndex = 0, jutsuIndex = 0, btn = nil }
+
 onTalk(function(name, level, mode, text, channelId, tpos)
     if not player then return end
     if name ~= player:getName() then return end
     local textLower = text:lower()
-    for i, combo in ipairs(storage.esp_combo_list) do
-        if combo.text and combo.text:len() > 0 then
-            if textLower == combo.text:lower() then
-                if comboAutoCD[textLower] and comboAutoCD[textLower].detecting then
-                    -- Segunda vez que conseguiu castar = CD detectado
-                    local elapsed = now - comboAutoCD[textLower].castTime
-                    if elapsed > 200 then
-                        combo.cooldown = elapsed
-                        comboAutoCD[textLower] = nil
-                        refreshCombos()
+    for spell, data in pairs(comboAutoCD) do
+        if textLower == spell then
+            if data.detecting then
+                local elapsed = now - data.castTime
+                if elapsed > 200 then
+                    -- CD detectado: spell conseguiu ser castada novamente
+                    local slot = storage.esp_combo_slots[data.slotIndex]
+                    if slot and slot.jutsus[data.jutsuIndex] then
+                        slot.jutsus[data.jutsuIndex].cooldown = elapsed
                     end
-                else
-                    comboAutoCD[textLower] = { castTime = now, detecting = false }
+                    comboAutoCD[spell] = nil
+                    -- Avancar para proximo jutsu
+                    autoCdAdvance()
                 end
+            else
+                data.detecting = true
+                data.castTime = now
             end
         end
     end
 end)
 
--- Listener para mensagens de erro de cooldown do servidor
 onTextMessage(function(mode, text)
     if not text then return end
     local textLower = text:lower()
-    -- Detecta mensagens como "You need to wait X seconds" ou "Cooldown: X"
     local seconds = textLower:match("wait (%d+%.?%d*) second")
         or textLower:match("cooldown.-%s(%d+%.?%d*)")
         or textLower:match("aguarde (%d+%.?%d*) segundo")
@@ -1224,28 +1315,78 @@ onTextMessage(function(mode, text)
     if seconds then
         seconds = tonumber(seconds)
         if seconds and seconds > 0 then
-            -- Aplica ao combo que esta em deteccao
             for spell, data in pairs(comboAutoCD) do
                 if data.detecting then
-                    for i, combo in ipairs(storage.esp_combo_list) do
-                        if combo.text and combo.text:lower() == spell then
-                            combo.cooldown = math.floor(seconds * 1000)
-                            comboAutoCD[spell] = nil
-                            refreshCombos()
-                            return
-                        end
+                    local slot = storage.esp_combo_slots[data.slotIndex]
+                    if slot and slot.jutsus[data.jutsuIndex] then
+                        slot.jutsus[data.jutsuIndex].cooldown = math.floor(seconds * 1000)
                     end
+                    comboAutoCD[spell] = nil
+                    autoCdAdvance()
+                    return
                 end
             end
         end
     end
 end)
 
--- Funcao para criar widget de um combo
-local function createComboWidget(index, comboData)
+-- Funcao que avanca a deteccao sequencial para o proximo jutsu
+function autoCdAdvance()
+  if not autoCdState.active then return end
+  local slot = storage.esp_combo_slots[autoCdState.slotIndex]
+  if not slot then autoCdFinish() return end
+
+  -- Proximo jutsu
+  autoCdState.jutsuIndex = autoCdState.jutsuIndex + 1
+  if autoCdState.jutsuIndex > #slot.jutsus then
+    autoCdFinish()
+    return
+  end
+
+  local jutsu = slot.jutsus[autoCdState.jutsuIndex]
+  if not jutsu or not jutsu.text or jutsu.text:len() == 0 then
+    autoCdAdvance() -- pula jutsus vazios
+    return
+  end
+
+  local spellLower = jutsu.text:lower()
+  comboAutoCD[spellLower] = {
+    castTime = now,
+    detecting = false,
+    slotIndex = autoCdState.slotIndex,
+    jutsuIndex = autoCdState.jutsuIndex
+  }
+
+  if autoCdState.btn and not autoCdState.btn:isDestroyed() then
+    autoCdState.btn:setText("Testando " .. autoCdState.jutsuIndex .. "/" .. #slot.jutsus .. "...")
+  end
+
+  say(jutsu.text)
+
+  -- Timeout por jutsu
+  local currentIdx = autoCdState.jutsuIndex
+  schedule(15000, function()
+    if autoCdState.active and autoCdState.jutsuIndex == currentIdx then
+      comboAutoCD[spellLower] = nil
+      autoCdAdvance()
+    end
+  end)
+end
+
+function autoCdFinish()
+  autoCdState.active = false
+  if autoCdState.btn and not autoCdState.btn:isDestroyed() then
+    autoCdState.btn:setText("Auto Cooldown")
+    autoCdState.btn:setColor("#00CCFF")
+  end
+  refreshCombos()
+end
+
+-- ===== Jutsu widget creation =====
+local function createJutsuWidget(slotIndex, jutsuIndex, jutsuData)
   local entry = setupUI([[
 Panel
-  height: 100
+  height: 55
   margin-top: 3
 
   Label
@@ -1254,7 +1395,7 @@ Panel
     anchors.left: parent.left
     color: #FFD700
     font: verdana-11px-rounded
-    text: Combo
+    text: Jutsu
 
   Button
     id: removeBtn
@@ -1271,15 +1412,15 @@ Panel
     anchors.left: parent.left
     anchors.right: parent.right
     height: 22
-    margin-top: 3
+    margin-top: 2
 
   Panel
     id: cdRow
     anchors.top: spellEdit.bottom
     anchors.left: parent.left
     anchors.right: parent.right
-    height: 24
-    margin-top: 3
+    height: 22
+    margin-top: 2
     Label
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
@@ -1293,67 +1434,42 @@ Panel
       anchors.bottom: parent.bottom
       width: 70
 
-  Button
-    id: autoCdBtn
-    anchors.top: cdRow.bottom
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 22
-    margin-top: 2
-    text: Auto Cooldown
-    color: #00CCFF
-
   ]], combosContent)
 
-  entry.title:setText("Combo #" .. index)
-  entry.spellEdit:setText(comboData.text or "")
-  entry.cdRow.cdEdit:setText(tostring(comboData.cooldown or 1000))
+  entry.title:setText("Jutsu #" .. jutsuIndex)
+  entry.spellEdit:setText(jutsuData.text or "")
+  entry.cdRow.cdEdit:setText(tostring(jutsuData.cooldown or 1000))
 
-  -- Estilo: fundo transparente e texto neon azul
   entry.spellEdit:setBackgroundColor("#00000033")
   entry.spellEdit:setColor("#00DDFF")
   entry.cdRow.cdEdit:setBackgroundColor("#00000033")
   entry.cdRow.cdEdit:setColor("#00DDFF")
 
   entry.spellEdit.onTextChange = function(w, text)
-    storage.esp_combo_list[index].text = text
+    local slot = storage.esp_combo_slots[slotIndex]
+    if slot and slot.jutsus[jutsuIndex] then
+      slot.jutsus[jutsuIndex].text = text
+    end
   end
 
   entry.cdRow.cdEdit.onTextChange = function(w, text)
     local val = tonumber(text) or 1000
     if val < 0 then val = 0 end
-    storage.esp_combo_list[index].cooldown = val
+    local slot = storage.esp_combo_slots[slotIndex]
+    if slot and slot.jutsus[jutsuIndex] then
+      slot.jutsus[jutsuIndex].cooldown = val
+    end
   end
 
-  -- Botao auto cooldown: ativa deteccao
-  entry.autoCdBtn.onClick = function(w)
-    local spell = comboData.text
-    if not spell or spell:len() == 0 then return end
-    local spellLower = spell:lower()
-    comboAutoCD[spellLower] = { castTime = now, detecting = true }
-    w:setText("Detectando...")
-    w:setColor("#FFFF00")
-    -- Tenta castar a spell para iniciar deteccao
-    say(spell)
-    -- Timeout: reseta apos 15 segundos se nao detectou
-    schedule(15000, function()
-      if comboAutoCD[spellLower] then
-        comboAutoCD[spellLower] = nil
-        if w and not w:isDestroyed() then
-          w:setText("Auto Cooldown")
-          w:setColor("#00CCFF")
-        end
-      end
-    end)
-  end
-
-  entry.spellEdit:setTooltip("Spell do combo (ex: exori gran)")
+  entry.spellEdit:setTooltip("Jutsu/magia do combo (ex: exori gran)")
   entry.cdRow.cdEdit:setTooltip("Cooldown em milissegundos (500 = 0.5s, 1000 = 1s, 2000 = 2s)")
-  entry.autoCdBtn:setTooltip("Clique para detectar automaticamente o cooldown da magia")
 
   entry.removeBtn.onClick = function(w)
-    comboCooldownEnd[index] = nil
-    table.remove(storage.esp_combo_list, index)
+    local slot = storage.esp_combo_slots[slotIndex]
+    if slot then
+      comboCooldownEnd[slotIndex][jutsuIndex] = nil
+      table.remove(slot.jutsus, jutsuIndex)
+    end
     refreshCombos()
   end
 
@@ -1361,45 +1477,102 @@ Panel
   return entry
 end
 
--- Refresh all combo widgets
+-- ===== Containers for dynamic widgets (add/ok/autocd buttons) =====
+local addJutsuBtnWidget = nil
+local okCombosBtnWidget = nil
+local autoCdBtnWidget = nil
+
+-- ===== Refresh: rebuild jutsu widgets for selected combo =====
 function refreshCombos()
   for _, w in ipairs(comboWidgets) do
     w:destroy()
   end
   comboWidgets = {}
-  for i, comboData in ipairs(storage.esp_combo_list) do
-    createComboWidget(i, comboData)
-  end
-end
 
--- Botao adicionar combo
-local addComboBtn = setupUI([[
+  -- Destroy dynamic buttons if they exist
+  if addJutsuBtnWidget then addJutsuBtnWidget:destroy() addJutsuBtnWidget = nil end
+  if autoCdBtnWidget then autoCdBtnWidget:destroy() autoCdBtnWidget = nil end
+  if okCombosBtnWidget then okCombosBtnWidget:destroy() okCombosBtnWidget = nil end
+
+  local sel = storage.esp_combo_selected
+  local slot = storage.esp_combo_slots[sel]
+  if not slot then return end
+
+  -- Atualizar nome no campo
+  comboNamePanel.nameEdit:setText(slot.name or ("Combo " .. sel))
+
+  updateSlotBtnColors()
+
+  -- Criar widgets para cada jutsu do combo selecionado
+  for i, jutsuData in ipairs(slot.jutsus) do
+    createJutsuWidget(sel, i, jutsuData)
+  end
+
+  -- Botao adicionar jutsu
+  addJutsuBtnWidget = setupUI([[
 Panel
   height: 25
+  margin-top: 3
   Button
-    id: addCombo
+    id: addJutsu
     color: green
     anchors.top: parent.top
     anchors.left: parent.left
     anchors.right: parent.right
     height: 25
-    text: + Adicionar Combo
+    text: + Adicionar Jutsu
 ]], combosContent)
 
-addComboBtn.addCombo.onClick = function(w)
-  local newIndex = #storage.esp_combo_list + 1
-  table.insert(storage.esp_combo_list, {
-    text = "magia " .. newIndex,
-    cooldown = 1000
-  })
-  refreshCombos()
-end
+  addJutsuBtnWidget.addJutsu.onClick = function(w)
+    local curSel = storage.esp_combo_selected
+    local curSlot = storage.esp_combo_slots[curSel]
+    if curSlot then
+      table.insert(curSlot.jutsus, { text = "", cooldown = 1000 })
+      refreshCombos()
+    end
+  end
 
--- Load existing combos on start
-refreshCombos()
+  -- Botao unico Auto Cooldown (testa cada jutsu do combo sequencialmente)
+  autoCdBtnWidget = setupUI([[
+Panel
+  height: 25
+  margin-top: 3
+  Button
+    id: autoBtn
+    color: #00CCFF
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 25
+    text: Auto Cooldown
+]], combosContent)
 
--- Botao OK para salvar combos
-local okCombosBtn = setupUI([[
+  autoCdBtnWidget.autoBtn:setTooltip("Testa cada jutsu do combo sequencialmente para detectar o cooldown")
+  autoCdBtnWidget.autoBtn.onClick = function(w)
+    local curSel = storage.esp_combo_selected
+    local curSlot = storage.esp_combo_slots[curSel]
+    if not curSlot or #curSlot.jutsus == 0 then return end
+
+    if autoCdState.active then
+      -- Cancelar deteccao em andamento
+      autoCdState.active = false
+      comboAutoCD = {}
+      w:setText("Auto Cooldown")
+      w:setColor("#00CCFF")
+      return
+    end
+
+    autoCdState.active = true
+    autoCdState.slotIndex = curSel
+    autoCdState.jutsuIndex = 0
+    autoCdState.btn = w
+    w:setText("Testando...")
+    w:setColor("#FFFF00")
+    autoCdAdvance()
+  end
+
+  -- Botao OK salvar
+  okCombosBtnWidget = setupUI([[
 Panel
   height: 25
   margin-top: 5
@@ -1412,20 +1585,36 @@ Panel
     height: 25
     text: OK - Salvar Combos
 ]], combosContent)
-okCombosBtn.okBtn.onClick = function()
-  saveEspeciaisProfile()
+  okCombosBtnWidget.okBtn.onClick = function()
+    saveEspeciaisProfile()
+  end
 end
 
--- Macro de combo com cooldown individual
+-- Slot button click handlers
+for s = 1, 5 do
+  comboSlotBtns[s].onClick = function(w)
+    storage.esp_combo_selected = s
+    refreshCombos()
+  end
+end
+
+-- Load on start
+refreshCombos()
+
+-- ===== Macro: executa jutsus do combo selecionado sequencialmente =====
 EspComboMacro = macro(100, "Combo Especial", function()
   if g_game.isAttacking() then
-    for i, combo in ipairs(storage.esp_combo_list) do
-      if combo.text and combo.text:len() > 0 then
-        local cdEnd = comboCooldownEnd[i] or 0
+    local sel = storage.esp_combo_selected
+    local slot = storage.esp_combo_slots[sel]
+    if not slot then return end
+    for i, jutsu in ipairs(slot.jutsus) do
+      if jutsu.text and jutsu.text:len() > 0 then
+        local cdEnd = (comboCooldownEnd[sel] and comboCooldownEnd[sel][i]) or 0
         if now >= cdEnd then
-          say(combo.text)
-          comboCooldownEnd[i] = now + (combo.cooldown or 1000)
-          return -- Usa um combo por vez respeitando o cooldown
+          say(jutsu.text)
+          if not comboCooldownEnd[sel] then comboCooldownEnd[sel] = {} end
+          comboCooldownEnd[sel][i] = now + (jutsu.cooldown or 1000)
+          return
         end
       end
     end
@@ -3435,8 +3624,9 @@ do
     data.esp_fugas_widgets_pos = deepCopy(storage.esp_fugas_widgets_pos or {})
     -- Traps
     data.esp_trap_list = deepCopy(storage.esp_trap_list or {})
-    -- Combos
-    data.esp_combo_list = deepCopy(storage.esp_combo_list or {})
+    -- Combos (5 slots)
+    data.esp_combo_slots = deepCopy(storage.esp_combo_slots or {})
+    data.esp_combo_selected = storage.esp_combo_selected or 1
     -- Buffs
     data.esp_buffs_list = deepCopy(storage.esp_buffs_list or {})
     -- Ataques
@@ -3512,7 +3702,22 @@ do
         end
       end
     end
-    if data.esp_combo_list then storage.esp_combo_list = deepCopy(data.esp_combo_list) end
+    if data.esp_combo_slots then
+      storage.esp_combo_slots = deepCopy(data.esp_combo_slots)
+      storage.esp_combo_selected = data.esp_combo_selected or 1
+    elseif data.esp_combo_list then
+      -- Migrar formato antigo: lista unica -> slot 1
+      storage.esp_combo_slots = {}
+      for s = 1, 5 do
+        storage.esp_combo_slots[s] = { name = "Combo " .. s, jutsus = {} }
+      end
+      for _, old in ipairs(data.esp_combo_list) do
+        if old.text and old.text:len() > 0 then
+          table.insert(storage.esp_combo_slots[1].jutsus, { text = old.text, cooldown = old.cooldown or 1000 })
+        end
+      end
+      storage.esp_combo_selected = 1
+    end
     if data.esp_buffs_list then storage.esp_buffs_list = deepCopy(data.esp_buffs_list) end
     if data.esp_ataque_list then storage.esp_ataque_list = deepCopy(data.esp_ataque_list) end
     if data.esp_stack_list then storage.esp_stack_list = deepCopy(data.esp_stack_list) end

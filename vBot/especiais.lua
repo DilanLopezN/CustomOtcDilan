@@ -54,6 +54,7 @@ end
 -- TAB: FUGAS (dinamico)
 -- =============================================
 EspTabBar:addTab("Fugas", espPanel1)
+local fugasContent = espPanel1.scrollArea
         UI.Separator(fugasContent)
         color= UI.Label("Fugas (tempo em segundos):",fugasContent)
 color:setColor("red")
@@ -1236,22 +1237,32 @@ local function comboPermutations(list)
 end
 
 -- Simula X milissegundos de combate com uma ordem especifica de jutsus
--- Retorna dano total acumulado
--- Apenas 1 jutsu por tick (servidor tem GCD interno)
+-- Retorna { damage = dano_total, time = tempo_para_completar_ciclo }
+-- Dispara TODOS os jutsus disponiveis por tick (igual ao macro real).
+-- O primeiro disponivel na ordem e processado pelo servidor; os demais
+-- ficam enfileirados e executam assim que o GCD liberar.
 local function simulateCombo(jutsus, order, durationMs)
   local TICK = 50  -- intervalo do EspComboMacro em ms
   local totalDamage = 0
   local cdEnd = {}
   for i = 1, #order do cdEnd[i] = 0 end
 
+  -- Simula disparando todos disponiveis a cada tick
+  -- O servidor processa 1 por GCD (~100ms), entao contamos
+  -- 1 cast efetivo por GCD mas todos sao tentados
+  local SERVER_GCD = 100  -- GCD do servidor em ms
+  local lastCastTime = -SERVER_GCD  -- permite cast imediato no t=0
+
   for t = 0, durationMs, TICK do
+    -- Tenta todos os jutsus na ordem (prioridade)
     for _, idx in ipairs(order) do
       local jutsu = jutsus[idx]
       if jutsu and (jutsu.damage or 0) > 0 then
-        if t >= (cdEnd[idx] or 0) then
+        if t >= (cdEnd[idx] or 0) and t >= (lastCastTime + SERVER_GCD) then
           totalDamage = totalDamage + (jutsu.damage or 0)
           cdEnd[idx] = t + (jutsu.cooldown or 1000) + (jutsu.castTime or 0)
-          break  -- apenas 1 cast por tick (GCD do servidor)
+          lastCastTime = t
+          break  -- 1 cast efetivo por GCD
         end
       end
     end
@@ -1546,7 +1557,7 @@ comboTestStartPhase2 = function()
   end)
 end
 
--- Fase 3: simular TODAS as permutacoes para achar o combo otimo
+-- Fase 3: simular TODAS as permutacoes para achar o combo que da mais dano no menor tempo
 comboTestStartPhase3 = function()
   comboTestState.phase = 3
   if comboTestState.btn and not comboTestState.btn:isDestroyed() then
@@ -1562,46 +1573,47 @@ comboTestStartPhase3 = function()
 
   -- Verificar se algum jutsu tem dano > 0
   local hasDamage = false
-  local dmgIndices = {}
-  for i, j in ipairs(slot.jutsus) do
+  for _, j in ipairs(slot.jutsus) do
     if (j.damage or 0) > 0 then
       hasDamage = true
-      table.insert(dmgIndices, i)
+      break
     end
   end
 
   if hasDamage then
     local N = #slot.jutsus
+    -- Duracao de simulacao: quanto maior, mais preciso o DPS medio
+    local SIM_DURATION = 20000  -- 20 segundos
 
-    if N <= 8 then
-      -- Testar TODAS as permutacoes (N! combinacoes, max 40320)
+    if N <= 10 then
+      -- Testar TODAS as permutacoes (N! combinacoes)
       local indices = {}
       for i = 1, N do indices[i] = i end
       local perms = comboPermutations(indices)
       local totalPerms = #perms
-      local bestDamage = -1
+      local bestDPS = -1
+      local bestDamage = 0
       local bestOrder = nil
 
-      -- Atualizar botao com progresso
       if comboTestState.btn and not comboTestState.btn:isDestroyed() then
-        comboTestState.btn:setText("Combo 0/" .. totalPerms .. "...")
+        comboTestState.btn:setText("0/" .. totalPerms .. " perms...")
         comboTestState.btn:setColor("#00FF88")
       end
 
       for p, order in ipairs(perms) do
-        local dmg = simulateCombo(slot.jutsus, order, 8000)
-        if dmg > bestDamage then
+        local dmg = simulateCombo(slot.jutsus, order, SIM_DURATION)
+        local dps = dmg / (SIM_DURATION / 1000)
+        if dps > bestDPS then
+          bestDPS = dps
           bestDamage = dmg
           bestOrder = order
         end
-        -- Atualizar progresso a cada 1000 permutacoes
-        if p % 1000 == 0 and comboTestState.btn and not comboTestState.btn:isDestroyed() then
-          comboTestState.btn:setText("Combo " .. p .. "/" .. totalPerms .. "...")
+        if p % 500 == 0 and comboTestState.btn and not comboTestState.btn:isDestroyed() then
+          comboTestState.btn:setText(p .. "/" .. totalPerms .. " perms...")
         end
       end
 
       if bestOrder then
-        -- Reordenar jutsus conforme a melhor permutacao
         local newJutsus = {}
         for _, idx in ipairs(bestOrder) do
           table.insert(newJutsus, slot.jutsus[idx])
@@ -1609,27 +1621,25 @@ comboTestStartPhase3 = function()
         slot.jutsus = newJutsus
         storage.esp_combo_slots[comboTestState.slotIndex] = slot
 
-        -- Exibir resultado
-        local dps = bestDamage / 8.0
         local orderStr = ""
         for i, j in ipairs(slot.jutsus) do
           local jdps = calcJutsuDPS(j)
-          if i > 1 then orderStr = orderStr .. " | " end
-          orderStr = orderStr .. i .. ". " .. (j.text or "?") .. " (DPS: " .. math.floor(jdps) .. ")"
+          if i > 1 then orderStr = orderStr .. " > " end
+          orderStr = orderStr .. (j.text or "?") .. " (DPS:" .. math.floor(jdps) .. ")"
         end
-        print("[Combo] Melhor ordem encontrada! (testadas: " .. totalPerms .. " combinacoes)")
-        print("[Combo] Dano total em 8s: " .. bestDamage .. " | DPS medio: " .. math.floor(dps) .. "/s")
-        print("[Combo] " .. orderStr)
+        print("[Combo] Melhor combo encontrado! (" .. totalPerms .. " permutacoes testadas)")
+        print("[Combo] Dano em " .. (SIM_DURATION/1000) .. "s: " .. bestDamage .. " | DPS: " .. string.format("%.1f", bestDPS) .. "/s")
+        print("[Combo] Ordem: " .. orderStr)
       end
     else
-      -- N > 8: fallback para ordenacao por DPS individual
+      -- N > 10: fallback para ordenacao por DPS individual (permutacoes demais)
       table.sort(slot.jutsus, function(a, b)
         return calcJutsuDPS(a) > calcJutsuDPS(b)
       end)
-      print("[Combo] " .. N .. " jutsus (>" .. "8) — ordenado por DPS individual (fallback)")
+      print("[Combo] " .. N .. " jutsus (>10) — ordenado por DPS individual")
     end
   else
-    -- Sem dano: fallback para menor cooldown
+    -- Sem dano detectado: ordenar por menor cooldown (mais casts possivel)
     table.sort(slot.jutsus, function(a, b)
       return (a.cooldown or 1000) < (b.cooldown or 1000)
     end)
@@ -2008,22 +2018,24 @@ updateComboSelect()
 refreshCombos()
 
 -- ===== Macro: executa jutsus do combo selecionado - maximo dano =====
+-- Fila virtual: dispara TODOS os jutsus disponiveis a cada tick.
+-- Jutsus em cooldown sao pulados automaticamente e voltam quando prontos.
+-- O servidor processa o primeiro disponivel; os demais ficam enfileirados.
+-- Isso maximiza o uptime de dano sem perder nenhuma janela de cooldown.
 EspComboMacro = macro(50, "Combo Especial", function()
-  if g_game.isAttacking() then
-    local sel = storage.esp_combo_selected
-    local slot = storage.esp_combo_slots[sel]
-    if not slot then return end
-    if not comboCooldownEnd[sel] then comboCooldownEnd[sel] = {} end
-    -- Lanca o PRIMEIRO jutsu disponivel (fora de cooldown) neste tick
-    -- Apenas 1 por tick: respeita a ordem otimizada pela fase 3 (permutacoes)
-    for i, jutsu in ipairs(slot.jutsus) do
-      if jutsu.text and jutsu.text:len() > 0 then
-        local cdEnd = comboCooldownEnd[sel][i] or 0
-        if now >= cdEnd then
-          say(jutsu.text)
-          comboCooldownEnd[sel][i] = now + (jutsu.cooldown or 1000)
-          break  -- apenas 1 cast por tick (igual a simulacao de permutacoes)
-        end
+  if not g_game.isAttacking() then return end
+  local sel = storage.esp_combo_selected
+  local slot = storage.esp_combo_slots[sel]
+  if not slot then return end
+  if not comboCooldownEnd[sel] then comboCooldownEnd[sel] = {} end
+
+  -- Dispara todos os jutsus que estao fora de cooldown neste tick
+  for i, jutsu in ipairs(slot.jutsus) do
+    if jutsu.text and jutsu.text:len() > 0 then
+      local cdEnd = comboCooldownEnd[sel][i] or 0
+      if now >= cdEnd then
+        say(jutsu.text)
+        comboCooldownEnd[sel][i] = now + (jutsu.cooldown or 1000)
       end
     end
   end

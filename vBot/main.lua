@@ -62,7 +62,6 @@ if rootWidget then
 
 espPanel1 = g_ui.createWidget("espPanel")
 espPanel1:setId("panelButtons")
-local fugasContent = espPanel1.scrollArea
 
 espPanel2 = g_ui.createWidget("espPanel")
 espPanel2:setId("2")

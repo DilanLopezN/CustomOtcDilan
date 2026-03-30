@@ -329,14 +329,14 @@ end
 
 -- Aplicar corText aos botoes/labels principais (ESPECIAIS, Macro Delay, PERFIS)
 local function applyMainButtonColors()
-    if _G.especiaisButton then
-        _G.especiaisButton:setColor(corText)
+    if especiaisButton then
+        especiaisButton:setColor(corText)
     end
-    if _G.macroDelayLabel then
-        _G.macroDelayLabel:setColor(corText)
+    if macroDelayLabel then
+        macroDelayLabel:setColor(corText)
     end
-    if _G.perfisButton then
-        _G.perfisButton:setColor(corText)
+    if perfisButton then
+        perfisButton:setColor(corText)
     end
 end
 

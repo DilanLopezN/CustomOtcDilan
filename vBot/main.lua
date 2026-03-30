@@ -116,43 +116,73 @@ end
 
 local macroDelayPanel = setupUI([[
 Panel
-  height: 38
+  height: 22
   background-color: alpha
 
   UIWidget
-    id: delayLabel
+    id: btnLeft
     anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.top: parent.top
+    anchors.verticalCenter: parent.verticalCenter
+    text-align: center
+    color: #FFD700
+    font: verdana-11px-rounded
+    text: <<
+    size: 20 20
+    background-color: alpha
+    image-source:
+    image-border: 0
+
+  UIWidget
+    id: delayLabel
+    anchors.left: btnLeft.right
+    anchors.right: btnRight.left
+    anchors.verticalCenter: parent.verticalCenter
     text-align: center
     color: #FFD700
     font: verdana-11px-rounded
     text: Macro Delay: 50ms
     background-color: alpha
 
-  HorizontalScrollBar
-    id: delayScroll
-    anchors.left: parent.left
+  UIWidget
+    id: btnRight
     anchors.right: parent.right
-    anchors.top: prev.bottom
-    margin-top: 3
-    minimum: 50
-    maximum: 300
-    step: 10
+    anchors.verticalCenter: parent.verticalCenter
+    text-align: center
+    color: #FFD700
+    font: verdana-11px-rounded
+    text: >>
+    size: 20 20
     background-color: alpha
+    image-source:
+    image-border: 0
 ]], parent)
 
 macroDelayPanel:setBackgroundColor("alpha")
-macroDelayPanel.delayScroll:setBackgroundColor("alpha")
-macroDelayPanel.delayScroll:setValue(storage.esp_macro_delay)
-macroDelayPanel.delayLabel:setText("Macro Delay: " .. storage.esp_macro_delay .. "ms")
-macroDelayPanel.delayScroll.onValueChange = function(widget, value)
-  storage.esp_macro_delay = value
-  macroDelayPanel.delayLabel:setText("Macro Delay: " .. value .. "ms")
+
+local function updateDelayLabel()
+  macroDelayPanel.delayLabel:setText("Macro Delay: " .. storage.esp_macro_delay .. "ms")
+end
+
+updateDelayLabel()
+
+macroDelayPanel.btnLeft.onMousePress = function(widget, mousePos, mouseButton)
+  if mouseButton == 1 then
+    storage.esp_macro_delay = math.max(50, storage.esp_macro_delay - 10)
+    updateDelayLabel()
+  end
+end
+
+macroDelayPanel.btnRight.onMousePress = function(widget, mousePos, mouseButton)
+  if mouseButton == 1 then
+    storage.esp_macro_delay = math.min(300, storage.esp_macro_delay + 10)
+    updateDelayLabel()
+  end
 end
 
 -- Expose widgets globally for visual_custom.lua color styling
 macroDelayLabel = macroDelayPanel.delayLabel
+macroDelayBtnLeft = macroDelayPanel.btnLeft
+macroDelayBtnRight = macroDelayPanel.btnRight
 especiaisButton = ui.editEspeciais
 
 UI.Separator()

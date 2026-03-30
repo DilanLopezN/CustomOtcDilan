@@ -94,6 +94,26 @@ local fugaUsesLeft = {}      -- [uid] = usos restantes antes do CD
 local fugaWidgets = {}
 local fugaScreenWidgets = {} -- [uid] = screen widget
 
+-- Controle de delay global dos macros especiais
+local espLastMacroUse = 0  -- timestamp do ultimo uso de qualquer macro especial
+
+-- Verifica e aplica o macro delay global. Retorna true se pode usar, false se ainda esta em delay.
+function espCheckMacroDelay()
+  local delayMs = storage.esp_macro_delay or 50
+  if now < espLastMacroUse + delayMs then
+    return false
+  end
+  return true
+end
+
+-- Marca o uso do macro (chamar apos say())
+function espMarkMacroUsed()
+  espLastMacroUse = now
+end
+
+-- Estado salvo de todos os macros ao pausar para fuga
+local espMacrosWereOn = {}
+
 -- Limpar widgets de fuga orfaos de execucoes anteriores
 local root = g_ui.getRootWidget()
 if root then
@@ -655,20 +675,51 @@ EspFugaMacro = macro(200, "Fugas Especiais", function()
     end
 
     if not fugaActive and now >= cdEnd then
-      -- Pausa combos e traps (salva estado anterior)
-      if not fugaActive then
-        trapsWereOn = EspTrapMacro and EspTrapMacro:isOn() or false
-        combosWereOn = EspComboMacro and EspComboMacro:isOn() or false
+      -- Pausa TODOS os macros especiais (salva estado anterior)
+      local allEspMacros = {
+        { name = "trap",      ref = EspTrapMacro },
+        { name = "combo",     ref = EspComboMacro },
+        { name = "buff",      ref = EspBuffMacro },
+        { name = "ataque",    ref = EspAtaqueMacro },
+        { name = "stack",     ref = EspStackMacro },
+        { name = "retas",     ref = EspRetasMacro },
+        { name = "perseguir", ref = EspPerseguirMacro },
+        { name = "genjutsu",  ref = EspGenjutsuMacro },
+      }
+
+      espMacrosWereOn = {}
+      for _, m in ipairs(allEspMacros) do
+        if m.ref then
+          espMacrosWereOn[m.name] = m.ref:isOn() or false
+          if m.ref:isOn() then m.ref.setOff() end
+        end
       end
 
       fugaActive = true
 
-      if EspComboMacro and EspComboMacro:isOn() then EspComboMacro.setOff() end
-      if EspTrapMacro and EspTrapMacro:isOn() then EspTrapMacro.setOff() end
-
       say(f.text)
 
       fugaUsesLeft[uid] = fugaUsesLeft[uid] - 1
+
+      -- Funcao para restaurar todos os macros ao estado anterior
+      local function restaurarMacros()
+        fugaActive = false
+        local restoreMacros = {
+          { name = "trap",      ref = EspTrapMacro },
+          { name = "combo",     ref = EspComboMacro },
+          { name = "buff",      ref = EspBuffMacro },
+          { name = "ataque",    ref = EspAtaqueMacro },
+          { name = "stack",     ref = EspStackMacro },
+          { name = "retas",     ref = EspRetasMacro },
+          { name = "perseguir", ref = EspPerseguirMacro },
+          { name = "genjutsu",  ref = EspGenjutsuMacro },
+        }
+        for _, m in ipairs(restoreMacros) do
+          if m.ref and espMacrosWereOn[m.name] and not m.ref:isOn() then
+            m.ref.setOn()
+          end
+        end
+      end
 
       if fugaUsesLeft[uid] <= 0 then
         -- Acabou os usos, entra em cooldown total
@@ -676,23 +727,13 @@ EspFugaMacro = macro(200, "Fugas Especiais", function()
         fugaActiveEnd[uid] = now + activeTimeMs
         fugaCooldownEnd[uid] = now + activeTimeMs + cooldownMs
 
-        schedule(activeTimeMs, function()
-          fugaActive = false
-          -- Restaura traps e combos ao estado anterior
-          if combosWereOn and EspComboMacro and not EspComboMacro:isOn() then EspComboMacro.setOn() end
-          if trapsWereOn and EspTrapMacro and not EspTrapMacro:isOn() then EspTrapMacro.setOn() end
-        end)
+        schedule(activeTimeMs, restaurarMacros)
       else
         -- Ainda tem usos, cooldown curto entre usos
         fugaActiveEnd[uid] = now + activeTimeMs
         fugaCooldownEnd[uid] = now + cdQtdMs
 
-        schedule(activeTimeMs, function()
-          fugaActive = false
-          -- Restaura traps e combos ao estado anterior
-          if combosWereOn and EspComboMacro and not EspComboMacro:isOn() then EspComboMacro.setOn() end
-          if trapsWereOn and EspTrapMacro and not EspTrapMacro:isOn() then EspTrapMacro.setOn() end
-        end)
+        schedule(activeTimeMs, restaurarMacros)
       end
 
       break
@@ -1018,6 +1059,7 @@ end
 -- Macro de traps: usa baseado em ordem, cooldown, % vida, await
 EspTrapMacro = macro(200, "Traps", function()
   if not g_game.isAttacking() then return end
+  if not espCheckMacroDelay() then return end
 
   local target = g_game.getAttackingCreature()
   if not target then return end
@@ -1055,6 +1097,7 @@ EspTrapMacro = macro(200, "Traps", function()
         -- Checa se nao esta em cooldown e nao esta ativa
         if now >= cdEnd and now >= activeEnd then
           say(trap.text)
+          espMarkMacroUsed()
           trapActiveEnd[uid] = now + trapTimeMs
           trapCooldownEnd[uid] = now + trapTimeMs + cooldownMs
           break  -- Usa uma trap por ciclo
@@ -1313,6 +1356,7 @@ refreshCombos()
 -- ===== Macro: executa TODOS os jutsus do combo na sequencia e recomeça =====
 EspComboMacro = macro(100, "Combo Especial", function()
   if not g_game.isAttacking() then return end
+  if not espCheckMacroDelay() then return end
   local sel = storage.esp_combo_selected
   local slot = storage.esp_combo_slots[sel]
   if not slot then return end
@@ -1322,6 +1366,7 @@ EspComboMacro = macro(100, "Combo Especial", function()
       say(jutsu.text)
     end
   end
+  espMarkMacroUsed()
 end, combosContent)
 
 -- =============================================
@@ -1538,6 +1583,7 @@ EspBuffMacro = macro(200, "Buffs Auto", function()
   if isInPz() then return end
   -- Nao usa buffs durante fuga ativa
   if fugaActive then return end
+  if not espCheckMacroDelay() then return end
 
   for _, b in ipairs(storage.esp_buffs_list) do
     if b.text and b.text:len() > 0 then
@@ -1550,6 +1596,7 @@ EspBuffMacro = macro(200, "Buffs Auto", function()
       -- Se o buff nao esta ativo e nao esta em CD, usa
       if now >= activeEnd and now >= cdEnd then
         say(b.text)
+        espMarkMacroUsed()
         buffActiveEnd[uid] = now + activeTimeMs
         buffCooldownEnd[uid] = now + activeTimeMs + cooldownMs
       end
@@ -1656,6 +1703,7 @@ EspAtaqueMacro = macro(100, "Ataque HP% Esp", function()
     if isInPz() then return end
     -- Nao ataca durante fuga ativa
     if fugaActive then return end
+    if not espCheckMacroDelay() then return end
 
     local target = g_game.getAttackingCreature()
     if not target or not target:isPlayer() then return end
@@ -1667,6 +1715,7 @@ EspAtaqueMacro = macro(100, "Ataque HP% Esp", function()
             local uid = atk.uid
             if now >= (ataqueCooldownEnd[uid] or 0) then
                 say(atk.spell)
+                espMarkMacroUsed()
                 ataqueCooldownEnd[uid] = now + ((atk.cd or 2) * 1000)
                 return
             end
@@ -2121,6 +2170,7 @@ end)
 EspStackMacro = macro(50, "Stack Esp", function()
     if isInPz() then return end
     if fugaActive then return end
+    if not espCheckMacroDelay() then return end
 
     -- Precisa do botao do meio do mouse pressionado
     local isMousePressed = g_mouse.isPressed(3)
@@ -2145,6 +2195,7 @@ EspStackMacro = macro(50, "Stack Esp", function()
                             local spellText = stk.spell
                             schedule(50, function()
                                 say(spellText)
+                                espMarkMacroUsed()
                             end)
 
                             -- 3. Apos 200ms, cancela o ataque (envia attack nil)
@@ -2621,6 +2672,7 @@ EspRetasMacro = macro(100, "Retas Esp", function()
     if isInPz() then return end
     if fugaActive then return end
     if retasDelayEnd >= now then return end
+    if not espCheckMacroDelay() then return end
 
     local target = getAttackingCreature()
     if not target then return end
@@ -2650,6 +2702,7 @@ EspRetasMacro = macro(100, "Retas Esp", function()
                         local maxDist = ret.distance or 4
                         if canUseReta(target, maxDist) then
                             say(ret.spell)
+                            espMarkMacroUsed()
                             retasCooldownEnd[uid] = now + ((ret.cd or 2) * 1000)
                             return
                         end
@@ -3037,6 +3090,7 @@ end)
 EspPerseguirMacro = macro(100, "Perseguir Esp", function()
     if isInPz() then return end
     if fugaActive then return end
+    if not espCheckMacroDelay() then return end
 
     local target = g_game.getAttackingCreature()
     if not target then return end
@@ -3061,6 +3115,7 @@ EspPerseguirMacro = macro(100, "Perseguir Esp", function()
             local uid = per.uid
             if now >= (perseguirCooldownEnd[uid] or 0) then
                 say(per.spell)
+                espMarkMacroUsed()
                 perseguirCooldownEnd[uid] = now + ((per.cd or 2) * 1000)
                 return
             end
@@ -3368,6 +3423,7 @@ EspGenjutsuMacro = macro(100, "Genjutsus Esp", function()
     if not g_game.isAttacking() then return end
     if isInPz() then return end
     if fugaActive then return end
+    if not espCheckMacroDelay() then return end
 
     local target = g_game.getAttackingCreature()
     if not target or not target:isPlayer() then return end
@@ -3385,6 +3441,7 @@ EspGenjutsuMacro = macro(100, "Genjutsus Esp", function()
                 if myHp <= hpThreshold and not isAnyFugaAvailable() then
                     if now >= (genjutsuCooldownEnd[uid] or 0) then
                         say(gen.spell)
+                        espMarkMacroUsed()
                         genjutsuCooldownEnd[uid] = now + ((gen.cd or 5) * 1000)
                         return
                     end
@@ -3394,6 +3451,7 @@ EspGenjutsuMacro = macro(100, "Genjutsus Esp", function()
                 if targetHp <= hpThreshold then
                     if now >= (genjutsuCooldownEnd[uid] or 0) then
                         say(gen.spell)
+                        espMarkMacroUsed()
                         genjutsuCooldownEnd[uid] = now + ((gen.cd or 5) * 1000)
                         return
                     end

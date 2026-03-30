@@ -1059,7 +1059,6 @@ end
 -- Macro de traps: usa baseado em ordem, cooldown, % vida, await
 EspTrapMacro = macro(200, "Traps", function()
   if not g_game.isAttacking() then return end
-  if not espCheckMacroDelay() then return end
 
   local target = g_game.getAttackingCreature()
   if not target then return end
@@ -1097,7 +1096,6 @@ EspTrapMacro = macro(200, "Traps", function()
         -- Checa se nao esta em cooldown e nao esta ativa
         if now >= cdEnd and now >= activeEnd then
           say(trap.text)
-          espMarkMacroUsed()
           trapActiveEnd[uid] = now + trapTimeMs
           trapCooldownEnd[uid] = now + trapTimeMs + cooldownMs
           break  -- Usa uma trap por ciclo
@@ -1356,7 +1354,6 @@ refreshCombos()
 -- ===== Macro: executa TODOS os jutsus do combo na sequencia e recomeça =====
 EspComboMacro = macro(100, "Combo Especial", function()
   if not g_game.isAttacking() then return end
-  if not espCheckMacroDelay() then return end
   local sel = storage.esp_combo_selected
   local slot = storage.esp_combo_slots[sel]
   if not slot then return end
@@ -1366,7 +1363,6 @@ EspComboMacro = macro(100, "Combo Especial", function()
       say(jutsu.text)
     end
   end
-  espMarkMacroUsed()
 end, combosContent)
 
 -- =============================================
@@ -1583,7 +1579,6 @@ EspBuffMacro = macro(200, "Buffs Auto", function()
   if isInPz() then return end
   -- Nao usa buffs durante fuga ativa
   if fugaActive then return end
-  if not espCheckMacroDelay() then return end
 
   for _, b in ipairs(storage.esp_buffs_list) do
     if b.text and b.text:len() > 0 then
@@ -1596,7 +1591,6 @@ EspBuffMacro = macro(200, "Buffs Auto", function()
       -- Se o buff nao esta ativo e nao esta em CD, usa
       if now >= activeEnd and now >= cdEnd then
         say(b.text)
-        espMarkMacroUsed()
         buffActiveEnd[uid] = now + activeTimeMs
         buffCooldownEnd[uid] = now + activeTimeMs + cooldownMs
       end
@@ -1703,7 +1697,6 @@ EspAtaqueMacro = macro(100, "Ataque HP% Esp", function()
     if isInPz() then return end
     -- Nao ataca durante fuga ativa
     if fugaActive then return end
-    if not espCheckMacroDelay() then return end
 
     local target = g_game.getAttackingCreature()
     if not target or not target:isPlayer() then return end
@@ -1715,7 +1708,6 @@ EspAtaqueMacro = macro(100, "Ataque HP% Esp", function()
             local uid = atk.uid
             if now >= (ataqueCooldownEnd[uid] or 0) then
                 say(atk.spell)
-                espMarkMacroUsed()
                 ataqueCooldownEnd[uid] = now + ((atk.cd or 2) * 1000)
                 return
             end
@@ -2170,7 +2162,6 @@ end)
 EspStackMacro = macro(50, "Stack Esp", function()
     if isInPz() then return end
     if fugaActive then return end
-    if not espCheckMacroDelay() then return end
 
     -- Precisa do botao do meio do mouse pressionado
     local isMousePressed = g_mouse.isPressed(3)
@@ -2195,7 +2186,6 @@ EspStackMacro = macro(50, "Stack Esp", function()
                             local spellText = stk.spell
                             schedule(50, function()
                                 say(spellText)
-                                espMarkMacroUsed()
                             end)
 
                             -- 3. Apos 200ms, cancela o ataque (envia attack nil)
@@ -2533,8 +2523,8 @@ local function getAttackingCreature()
     return g_game.getAttackingCreature()
 end
 
--- Funcao canUseReta - verifica se pode usar reta no alvo
-local function canUseReta(creature, maxDist)
+-- Funcao canUseReta - verifica se pode usar reta no alvo (sem limite de distancia)
+local function canUseReta(creature)
     local creaturePos = creature:getPosition()
     if not creaturePos then return false end
 
@@ -2546,13 +2536,11 @@ local function canUseReta(creature, maxDist)
     local adx = math.abs(dx)
     local ady = math.abs(dy)
 
-    maxDist = maxDist or 4
-
     -- Mesma posicao, nao faz nada
     if adx == 0 and ady == 0 then return false end
 
-    -- Cenario 1: Ja esta em linha reta e dentro da distancia
-    if adx == 0 and ady <= maxDist then
+    -- Cenario 1: Ja esta em linha reta (sem limite de distancia)
+    if adx == 0 then
         -- Linha vertical
         local targetDir = dy > 0 and 2 or 0  -- SUL ou NORTE
         local currentDir = correctDirection()
@@ -2562,7 +2550,7 @@ local function canUseReta(creature, maxDist)
             turn(targetDir)
             return false
         end
-    elseif ady == 0 and adx <= maxDist then
+    elseif ady == 0 then
         -- Linha horizontal
         local targetDir = dx > 0 and 1 or 3  -- LESTE ou OESTE
         local currentDir = correctDirection()
@@ -2672,7 +2660,6 @@ EspRetasMacro = macro(100, "Retas Esp", function()
     if isInPz() then return end
     if fugaActive then return end
     if retasDelayEnd >= now then return end
-    if not espCheckMacroDelay() then return end
 
     local target = getAttackingCreature()
     if not target then return end
@@ -2699,10 +2686,8 @@ EspRetasMacro = macro(100, "Retas Esp", function()
                     local hpLimit = ret.hpPercent or 100
                     local targetHp = target:getHealthPercent()
                     if targetHp and targetHp <= hpLimit then
-                        local maxDist = ret.distance or 4
-                        if canUseReta(target, maxDist) then
+                        if canUseReta(target) then
                             say(ret.spell)
-                            espMarkMacroUsed()
                             retasCooldownEnd[uid] = now + ((ret.cd or 2) * 1000)
                             return
                         end
@@ -3090,7 +3075,6 @@ end)
 EspPerseguirMacro = macro(100, "Perseguir Esp", function()
     if isInPz() then return end
     if fugaActive then return end
-    if not espCheckMacroDelay() then return end
 
     local target = g_game.getAttackingCreature()
     if not target then return end
@@ -3115,7 +3099,6 @@ EspPerseguirMacro = macro(100, "Perseguir Esp", function()
             local uid = per.uid
             if now >= (perseguirCooldownEnd[uid] or 0) then
                 say(per.spell)
-                espMarkMacroUsed()
                 perseguirCooldownEnd[uid] = now + ((per.cd or 2) * 1000)
                 return
             end
@@ -3423,7 +3406,6 @@ EspGenjutsuMacro = macro(100, "Genjutsus Esp", function()
     if not g_game.isAttacking() then return end
     if isInPz() then return end
     if fugaActive then return end
-    if not espCheckMacroDelay() then return end
 
     local target = g_game.getAttackingCreature()
     if not target or not target:isPlayer() then return end
@@ -3441,7 +3423,6 @@ EspGenjutsuMacro = macro(100, "Genjutsus Esp", function()
                 if myHp <= hpThreshold and not isAnyFugaAvailable() then
                     if now >= (genjutsuCooldownEnd[uid] or 0) then
                         say(gen.spell)
-                        espMarkMacroUsed()
                         genjutsuCooldownEnd[uid] = now + ((gen.cd or 5) * 1000)
                         return
                     end
@@ -3451,7 +3432,6 @@ EspGenjutsuMacro = macro(100, "Genjutsus Esp", function()
                 if targetHp <= hpThreshold then
                     if now >= (genjutsuCooldownEnd[uid] or 0) then
                         say(gen.spell)
-                        espMarkMacroUsed()
                         genjutsuCooldownEnd[uid] = now + ((gen.cd or 5) * 1000)
                         return
                     end

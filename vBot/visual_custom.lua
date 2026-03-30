@@ -232,6 +232,10 @@ local function applyTabStyle()
             tab:setStyle("CustomTabBarButton")
             tab:setColor(corText)
             tab:setBorderColor(corText)
+            tab:setFont("terminus-14px-bold")
+            -- Neon glow: borda colorida ao redor do texto
+            tab:setBorderWidth(1)
+            tab:setBorderColor(corText)
         end
     end
 end

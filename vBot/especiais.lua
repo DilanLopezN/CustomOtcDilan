@@ -3249,3 +3249,424 @@ okPerseguirBtn.okBtn.onClick = function()
 end
 
 
+-- =============================================
+-- TAB: GENJUTSUS (Defensivo/Ofensivo por HP%)
+-- Defensivo: solta baseado na vida do MEU personagem + sem fuga disponivel
+-- Ofensivo: solta baseado na vida do OPONENTE
+-- =============================================
+EspTabBar:addTab("Genjutsus", espPanel9)
+local genjutsuContent = espPanel9.scrollArea
+        UI.Separator(genjutsuContent)
+        color= UI.Label("Genjutsus (Defensivo / Ofensivo):",genjutsuContent)
+color:setColor("#CC00FF")
+        UI.Separator(genjutsuContent)
+
+-- Storage: lista de genjutsus
+if type(storage.esp_genjutsu_list) ~= "table" then
+  storage.esp_genjutsu_list = {}
+end
+
+-- Atribui IDs unicos para cada genjutsu existente
+local genjutsuIdCounter = 0
+for _, g in ipairs(storage.esp_genjutsu_list) do
+  if g.uid and g.uid >= genjutsuIdCounter then
+    genjutsuIdCounter = g.uid + 1
+  end
+end
+for _, g in ipairs(storage.esp_genjutsu_list) do
+  if not g.uid then
+    g.uid = genjutsuIdCounter
+    genjutsuIdCounter = genjutsuIdCounter + 1
+  end
+end
+
+local genjutsuCooldownEnd = {}  -- [uid] = timestamp quando CD termina
+local genjutsuWidgets = {}
+
+-- Widget de cooldowns na tela
+storage.espGenjutsuWidgetPos = storage.espGenjutsuWidgetPos or {x = 10, y = 400}
+
+local espGenjutsuWidget = setupUI([[
+UIWidget
+  background-color: black
+  font: verdana-11px-rounded
+  opacity: 0.70
+  padding: 5 10
+  focusable: true
+  phantom: false
+  draggable: true
+  text-auto-resize: true
+]], g_ui.getRootWidget())
+
+espGenjutsuWidget:setPosition({x = storage.espGenjutsuWidgetPos.x, y = storage.espGenjutsuWidgetPos.y})
+
+espGenjutsuWidget.onDragEnter = function(widget, mousePos)
+    widget:breakAnchors()
+    widget.movingReference = {
+        x = mousePos.x - widget:getX(),
+        y = mousePos.y - widget:getY()
+    }
+    return true
+end
+
+espGenjutsuWidget.onDragMove = function(widget, mousePos)
+    widget:move(
+        mousePos.x - widget.movingReference.x,
+        mousePos.y - widget.movingReference.y
+    )
+    return true
+end
+
+espGenjutsuWidget.onDragLeave = function(widget, pos)
+    storage.espGenjutsuWidgetPos.x = widget:getX()
+    storage.espGenjutsuWidgetPos.y = widget:getY()
+    return true
+end
+
+-- Funcao auxiliar: verifica se alguma fuga esta disponivel (off cooldown)
+local function isAnyFugaAvailable()
+  if type(storage.esp_fugas_list) ~= "table" then return false end
+  local hp = player:getHealthPercent()
+  for _, f in ipairs(storage.esp_fugas_list) do
+    if f.text and f.text:len() > 0 then
+      local hpThreshold = tonumber(f.hp) or 50
+      if hp <= hpThreshold then
+        local uid = f.uid
+        local cdEnd = fugaCooldownEnd[uid] or 0
+        if now >= cdEnd and not fugaActive then
+          return true
+        end
+      end
+    end
+  end
+  return false
+end
+
+-- Macro para atualizar widget de cooldowns na tela
+macro(100, function()
+    local text = ""
+    for _, gen in ipairs(storage.esp_genjutsu_list) do
+        if gen.spell and gen.spell ~= "" then
+            local uid = gen.uid
+            local cdTime = genjutsuCooldownEnd[uid] or 0
+            local remaining = math.max(0, math.ceil((cdTime - now) / 1000))
+            local name = gen.name and gen.name ~= "" and gen.name or gen.spell
+            local tipo = gen.tipo == "defensivo" and "[D]" or "[O]"
+            text = text .. tipo .. " " .. name .. ": " .. remaining .. "s\n"
+        end
+    end
+    if text ~= "" then
+        espGenjutsuWidget:setText(text:sub(1, -2))
+        espGenjutsuWidget:show()
+    else
+        espGenjutsuWidget:hide()
+    end
+end)
+
+-- Macro principal de genjutsu
+EspGenjutsuMacro = macro(100, "Genjutsus Esp", function()
+    if not g_game.isAttacking() then return end
+    if isInPz() then return end
+    if fugaActive then return end
+
+    local target = g_game.getAttackingCreature()
+    if not target or not target:isPlayer() then return end
+
+    local myHp = player:getHealthPercent()
+    local targetHp = target:getHealthPercent()
+
+    for _, gen in ipairs(storage.esp_genjutsu_list) do
+        if gen.spell and gen.spell ~= "" then
+            local uid = gen.uid
+            local hpThreshold = tonumber(gen.hp) or 50
+
+            if gen.tipo == "defensivo" then
+                -- Defensivo: solta quando MEU HP <= threshold E nenhuma fuga disponivel
+                if myHp <= hpThreshold and not isAnyFugaAvailable() then
+                    if now >= (genjutsuCooldownEnd[uid] or 0) then
+                        say(gen.spell)
+                        genjutsuCooldownEnd[uid] = now + ((gen.cd or 5) * 1000)
+                        return
+                    end
+                end
+            else
+                -- Ofensivo: solta quando HP do OPONENTE <= threshold
+                if targetHp <= hpThreshold then
+                    if now >= (genjutsuCooldownEnd[uid] or 0) then
+                        say(gen.spell)
+                        genjutsuCooldownEnd[uid] = now + ((gen.cd or 5) * 1000)
+                        return
+                    end
+                end
+            end
+        end
+    end
+end, genjutsuContent)
+
+-- Funcao para criar widget de um genjutsu
+local function createGenjutsuWidget(index, genData)
+  local uid = genData.uid
+  local entry = setupUI([[
+Panel
+  height: 220
+  margin-top: 3
+
+  Label
+    id: title
+    anchors.top: parent.top
+    anchors.left: parent.left
+    color: #CC00FF
+    font: verdana-11px-rounded
+    text: Genjutsu
+
+  Button
+    id: removeBtn
+    color: red
+    anchors.top: parent.top
+    anchors.right: parent.right
+    width: 20
+    height: 18
+    text: X
+
+  Panel
+    id: rowTipo
+    anchors.top: removeBtn.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 3
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: Tipo:
+      color: #FFCC00
+      text-auto-resize: true
+    ComboBox
+      id: tipoCombo
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 120
+
+  Label
+    id: hpInfo
+    anchors.top: rowTipo.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 3
+    color: #AADDFF
+    font: verdana-11px-rounded
+    text-auto-resize: true
+
+  Label
+    id: lbl1
+    anchors.top: hpInfo.bottom
+    anchors.left: parent.left
+    margin-top: 3
+    text: Spell:
+    color: white
+    text-auto-resize: true
+
+  TextEdit
+    id: spellEdit
+    anchors.top: lbl1.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 22
+    margin-top: 1
+
+  Panel
+    id: row1
+    anchors.top: spellEdit.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 3
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: Nome (tela):
+      color: #AADDFF
+      text-auto-resize: true
+    TextEdit
+      id: nameEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 100
+
+  Panel
+    id: row2
+    anchors.top: row1.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 2
+    Label
+      id: hpLabel
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: HP%:
+      color: white
+      text-auto-resize: true
+    TextEdit
+      id: hpEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 55
+
+  Panel
+    id: row3
+    anchors.top: row2.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+    margin-top: 2
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: CD(s):
+      color: white
+      text-auto-resize: true
+    TextEdit
+      id: cdEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 55
+
+  ]], genjutsuContent)
+
+  entry.title:setText("Genjutsu #" .. index)
+  entry.spellEdit:setText(genData.spell or "")
+  entry.row1.nameEdit:setText(genData.name or "")
+  entry.row2.hpEdit:setText(tostring(genData.hp or 50))
+  entry.row3.cdEdit:setText(tostring(genData.cd or 5))
+
+  -- ComboBox tipo: Defensivo / Ofensivo
+  entry.rowTipo.tipoCombo:addOption("Defensivo")
+  entry.rowTipo.tipoCombo:addOption("Ofensivo")
+
+  -- Selecionar o tipo correto
+  if genData.tipo == "ofensivo" then
+    entry.rowTipo.tipoCombo:setCurrentIndex(2)
+  else
+    entry.rowTipo.tipoCombo:setCurrentIndex(1)
+  end
+
+  -- Funcao para atualizar label de info baseado no tipo
+  local function updateHpInfo(tipo)
+    if tipo == "defensivo" then
+      entry.hpInfo:setText("Solta no oponente quando MEU HP <= X%\ne nenhuma fuga disponivel")
+      entry.hpInfo:setColor("#00FF88")
+    else
+      entry.hpInfo:setText("Solta no oponente quando HP DELE <= X%")
+      entry.hpInfo:setColor("#FF6600")
+    end
+  end
+  updateHpInfo(genData.tipo or "defensivo")
+
+  -- Tooltips
+  entry.spellEdit:setTooltip("Nome da spell de genjutsu (ex: genjutsu sharingan)")
+  entry.row1.nameEdit:setTooltip("Nome exibido no widget da tela (opcional, usa spell se vazio)")
+  entry.row2.hpEdit:setTooltip("HP% para ativar o genjutsu")
+  entry.row3.cdEdit:setTooltip("Cooldown em segundos entre usos")
+
+  -- Estilo: fundo transparente e texto neon
+  local genInputs = {entry.spellEdit, entry.row1.nameEdit, entry.row2.hpEdit, entry.row3.cdEdit}
+  for _, input in ipairs(genInputs) do
+    input:setBackgroundColor("#00000033")
+    input:setColor("#00DDFF")
+  end
+
+  entry.spellEdit.onTextChange = function(w, text)
+    storage.esp_genjutsu_list[index].spell = text
+  end
+  entry.row1.nameEdit.onTextChange = function(w, text)
+    storage.esp_genjutsu_list[index].name = text
+  end
+  entry.row2.hpEdit.onTextChange = function(w, text)
+    storage.esp_genjutsu_list[index].hp = tonumber(text) or 50
+  end
+  entry.row3.cdEdit.onTextChange = function(w, text)
+    storage.esp_genjutsu_list[index].cd = tonumber(text) or 5
+  end
+
+  entry.rowTipo.tipoCombo.onOptionChange = function(w, text)
+    local selectedTipo = (text == "Ofensivo") and "ofensivo" or "defensivo"
+    storage.esp_genjutsu_list[index].tipo = selectedTipo
+    updateHpInfo(selectedTipo)
+  end
+
+  entry.removeBtn.onClick = function(w)
+    genjutsuCooldownEnd[uid] = nil
+    table.remove(storage.esp_genjutsu_list, index)
+    refreshGenjutsus()
+  end
+
+  table.insert(genjutsuWidgets, entry)
+  return entry
+end
+
+-- Refresh all genjutsu widgets
+function refreshGenjutsus()
+  for _, w in ipairs(genjutsuWidgets) do
+    w:destroy()
+  end
+  genjutsuWidgets = {}
+  for i, genData in ipairs(storage.esp_genjutsu_list) do
+    createGenjutsuWidget(i, genData)
+  end
+end
+
+-- Botao adicionar genjutsu
+local addGenjutsuBtn = setupUI([[
+Panel
+  height: 25
+  Button
+    id: addGenjutsu
+    color: #CC00FF
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 25
+    text: + Adicionar Genjutsu
+]], genjutsuContent)
+
+addGenjutsuBtn.addGenjutsu.onClick = function(w)
+  local newIndex = #storage.esp_genjutsu_list + 1
+  local newUid = genjutsuIdCounter
+  genjutsuIdCounter = genjutsuIdCounter + 1
+  table.insert(storage.esp_genjutsu_list, {
+    spell = "genjutsu " .. newIndex,
+    name = "",
+    tipo = "defensivo",
+    hp = 30,
+    cd = 5,
+    uid = newUid
+  })
+  refreshGenjutsus()
+end
+
+-- Load existing genjutsus on start
+refreshGenjutsus()
+
+-- Botao OK para salvar genjutsus
+local okGenjutsuBtn = setupUI([[
+Panel
+  height: 25
+  margin-top: 5
+  Button
+    id: okBtn
+    color: #00FF88
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 25
+    text: OK - Salvar Genjutsus
+]], genjutsuContent)
+okGenjutsuBtn.okBtn.onClick = function()
+  saveEspeciaisProfile()
+end
+

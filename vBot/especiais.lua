@@ -1074,32 +1074,24 @@ local combosContent = espPanel3.scrollArea
 
 -- ===== Storage: 5 combo slots =====
 if type(storage.esp_combo_slots) ~= "table" then
-  -- Migrar do formato antigo (esp_combo_list) se existir
   storage.esp_combo_slots = {}
   for s = 1, 5 do
     storage.esp_combo_slots[s] = { name = "Combo " .. s, jutsus = {} }
   end
   if type(storage.esp_combo_list) == "table" and #storage.esp_combo_list > 0 then
-    -- Migrar jutsus antigos para o slot 1
     for _, old in ipairs(storage.esp_combo_list) do
       if old.text and old.text:len() > 0 then
-        table.insert(storage.esp_combo_slots[1].jutsus, { text = old.text, cooldown = old.cooldown or 1000 })
+        table.insert(storage.esp_combo_slots[1].jutsus, { text = old.text })
       end
     end
   end
 end
--- Garantir que sempre existam 5 slots
 for s = 1, 5 do
   if not storage.esp_combo_slots[s] then
     storage.esp_combo_slots[s] = { name = "Combo " .. s, jutsus = {} }
   end
   if type(storage.esp_combo_slots[s].jutsus) ~= "table" then
     storage.esp_combo_slots[s].jutsus = {}
-  end
-  for _, j in ipairs(storage.esp_combo_slots[s].jutsus) do
-    if not j.cooldown then j.cooldown = 1000 end
-    if not j.damage then j.damage = 0 end
-    if not j.castTime then j.castTime = 0 end
   end
 end
 
@@ -1108,10 +1100,6 @@ if type(storage.esp_combo_selected) ~= "number" or storage.esp_combo_selected < 
 end
 
 local comboWidgets = {}
-local comboCooldownEnd = {} -- [slotIndex][jutsuIndex] = timestamp
-for s = 1, 5 do
-  comboCooldownEnd[s] = {}
-end
 
 -- ===== Header: "Selecionar Combo" com ComboBox dropdown =====
 local comboSelectPanel = setupUI([[
@@ -1190,667 +1178,18 @@ end
 
 UI.Separator(combosContent)
 
--- ===== Sistema de teste de combo (3 fases: cooldown, dano, otimizacao DPS) =====
-local comboTestState = {
-  active = false,
-  phase = 0,          -- 0=idle, 1=detectando CD, 2=medindo dano, 3=otimizando
-  slotIndex = 0,
-  jutsuIndex = 0,
-  btn = nil,
-  lastCastTime = 0,
-  retryInterval = 100,   -- 100ms, castar sem parar
-  -- Fase 1
-  detectedByEvent = false,
-  comboAutoCD = {},    -- spell tracking data
-  -- Fase 2
-  measuring = false,
-  currentDamage = 0,
-  dmgJutsuIndex = 0,
-  dmgResults = {},
-  dmgCastCount = 0,
-  dmgWaitingCd = false,
-  dmgWaitStart = 0,
-  dmgWaitDuration = 500,
-  dmgCastStart = 0,
-  dmgPhaseStart = 0,
-}
-
--- Gera todas as permutacoes de uma lista
-local function comboPermutations(list)
-  local result = {}
-  local function permute(arr, l)
-    if l == #arr then
-      local copy = {}
-      for i, v in ipairs(arr) do copy[i] = v end
-      table.insert(result, copy)
-      return
-    end
-    for i = l, #arr do
-      arr[l], arr[i] = arr[i], arr[l]
-      permute(arr, l + 1)
-      arr[l], arr[i] = arr[i], arr[l]
-    end
-  end
-  local arr = {}
-  for i, v in ipairs(list) do arr[i] = v end
-  permute(arr, 1)
-  return result
-end
-
--- Simula X milissegundos de combate com uma ordem especifica de jutsus
--- Retorna dano total. Respeita exhaust (GCD global) e cooldown por skill.
--- A cada tick, tenta castar o primeiro jutsu disponivel na ordem de prioridade.
--- Apos castar, aplica o exhaust desse jutsu como tempo minimo antes do proximo cast.
-local function simulateCombo(jutsus, order, durationMs)
-  local TICK = 50  -- intervalo do EspComboMacro em ms
-  local totalDamage = 0
-  local cdEnd = {}
-  for i = 1, #order do cdEnd[i] = 0 end
-
-  local exhaustEnd = 0  -- tempo global de exhaust (proximo instante que qualquer cast e permitido)
-
-  for t = 0, durationMs, TICK do
-    if t >= exhaustEnd then
-      -- Tenta o primeiro jutsu disponivel na ordem de prioridade
-      for _, idx in ipairs(order) do
-        local jutsu = jutsus[idx]
-        if jutsu and (jutsu.damage or 0) > 0 then
-          if t >= (cdEnd[idx] or 0) then
-            totalDamage = totalDamage + (jutsu.damage or 0)
-            cdEnd[idx] = t + (jutsu.cooldown or 1000)
-            exhaustEnd = t + (jutsu.exhaust or 500)
-            break  -- 1 cast por janela de exhaust
-          end
-        end
-      end
-    end
-  end
-  return totalDamage
-end
-
--- Calcula DPS individual de um jutsu (considera o maior entre exhaust e cooldown)
-local function calcJutsuDPS(jutsu)
-  local dmg = jutsu.damage or 0
-  local cd = jutsu.cooldown or 1000
-  local exh = jutsu.exhaust or 500
-  -- O tempo efetivo entre casts e o maior entre cooldown e exhaust
-  local effectiveTime = math.max(cd, exh) / 1000
-  if effectiveTime <= 0 then effectiveTime = 0.1 end
-  return dmg / effectiveTime
-end
-
--- Forward declarations
-local comboTestAdvance, comboTestDmgAdvance, comboTestStartPhase2, comboTestStartPhase3, comboTestFinish
-
--- Detecta quando o proprio jogador fala a spell (cast bem-sucedido)
-onTalk(function(name, level, mode, text, channelId, tpos)
-    if not player then return end
-    if name ~= player:getName() then return end
-    if not comboTestState.active then return end
-    if comboTestState.phase ~= 1 then return end
-    if comboTestState.detectedByEvent then return end
-    local textLower = text:trim():lower()
-    for spell, data in pairs(comboTestState.comboAutoCD) do
-        if textLower == spell then
-            if not data.castTimes then data.castTimes = {} end
-            table.insert(data.castTimes, now)
-
-            -- Medir castTime: tempo entre say() e confirmacao do cast
-            if data.lastSayTime then
-                local ct = now - data.lastSayTime
-                if ct >= 0 and ct < 5000 then
-                    if not data.castTimeValues then data.castTimeValues = {} end
-                    table.insert(data.castTimeValues, ct)
-                end
-                data.lastSayTime = nil
-            end
-
-            if #data.castTimes >= 3 then
-                -- 3 casts: calcula media dos intervalos
-                local intervals = {}
-                for k = 2, #data.castTimes do
-                    local elapsed = data.castTimes[k] - data.castTimes[k-1]
-                    if elapsed > (comboTestState.retryInterval + 50) then
-                        table.insert(intervals, elapsed)
-                    end
-                end
-                if #intervals > 0 then
-                    local sum = 0
-                    for _, v in ipairs(intervals) do sum = sum + v end
-                    local avgCd = math.floor(sum / #intervals)
-                    avgCd = math.floor((avgCd + 250) / 500) * 500
-                    if avgCd < 500 then avgCd = 500 end
-                    local slot = storage.esp_combo_slots[data.slotIndex]
-                    if slot and slot.jutsus[data.jutsuIndex] then
-                        slot.jutsus[data.jutsuIndex].cooldown = avgCd
-                    end
-                end
-                -- Salvar castTime medio
-                if data.castTimeValues and #data.castTimeValues > 0 then
-                    local ctSum = 0
-                    for _, v in ipairs(data.castTimeValues) do ctSum = ctSum + v end
-                    local avgCt = math.floor(ctSum / #data.castTimeValues)
-                    avgCt = math.floor((avgCt + 25) / 50) * 50
-                    local slot = storage.esp_combo_slots[data.slotIndex]
-                    if slot and slot.jutsus[data.jutsuIndex] then
-                        slot.jutsus[data.jutsuIndex].castTime = avgCt
-                    end
-                end
-                comboTestState.comboAutoCD[spell] = nil
-                comboTestAdvance()
-            end
-        end
-    end
-end)
-
--- Detecta mensagens de cooldown do servidor + dano (mode 21)
-onTextMessage(function(mode, text)
-    if not text then return end
-    if not comboTestState.active then return end
-
-    -- FASE 2: captura dano (mode 21)
-    if comboTestState.phase == 2 and comboTestState.measuring and mode == 21 then
-        local value = getFirstNumberInText(text)
-        if value and value > 0 then
-            comboTestState.currentDamage = comboTestState.currentDamage + value
-        end
-        return
-    end
-
-    -- FASE 1: detecta cooldown por mensagem de texto
-    if comboTestState.phase ~= 1 then return end
-    local textLower = text:lower()
-    local seconds = textLower:match("wait (%d+%.?%d*) second")
-        or textLower:match("cooldown.-%s(%d+%.?%d*)")
-        or textLower:match("aguarde (%d+%.?%d*) segundo")
-        or textLower:match("espere (%d+%.?%d*) segundo")
-        or textLower:match("(%d+%.?%d*) second")
-        or textLower:match("(%d+%.?%d*) segundo")
-    if seconds then
-        seconds = tonumber(seconds)
-        if seconds and seconds > 0 and (now - comboTestState.lastCastTime) < 2000 then
-            for spell, data in pairs(comboTestState.comboAutoCD) do
-                if not data.castTimes or #data.castTimes == 0 then
-                    data.serverCd = math.floor(seconds * 1000)
-                end
-            end
-        end
-    end
-    -- Detecta mensagem de exhausted sem numero de segundos
-    if (now - comboTestState.lastCastTime) < 1000 then
-        if textLower:find("exhausted") or textLower:find("exaust") or textLower:find("you cannot") or textLower:find("not ready") or textLower:find("need to wait") then
-            for spell, data in pairs(comboTestState.comboAutoCD) do
-                if not data.castTimes or #data.castTimes == 0 then
-                    data.castFailed = true
-                end
-            end
-        end
-    end
-end)
-
--- Detecta cooldown via evento do jogo (metodo mais confiavel)
-if onSpellCooldown then
-    onSpellCooldown(function(iconId, duration)
-        if not comboTestState.active then return end
-        if comboTestState.phase ~= 1 then return end
-        if not duration or duration <= 0 then return end
-        if (now - comboTestState.lastCastTime) < 1000 then
-            for spell, data in pairs(comboTestState.comboAutoCD) do
-                local roundedDuration = math.floor((duration + 250) / 500) * 500
-                if roundedDuration < 500 then roundedDuration = 500 end
-                local slot = storage.esp_combo_slots[data.slotIndex]
-                if slot and slot.jutsus[data.jutsuIndex] then
-                    slot.jutsus[data.jutsuIndex].cooldown = roundedDuration
-                end
-                comboTestState.comboAutoCD[spell] = nil
-                comboTestState.detectedByEvent = true
-                comboTestAdvance()
-                return
-            end
-        end
-    end)
-end
-
--- Macro de retry: fase 1 (cooldown) e fase 2 (dano) — roda a cada 100ms
-macro(100, function()
-  if not comboTestState.active then return end
-
-  -- FASE 1: retry de cast para detectar cooldown
-  if comboTestState.phase == 1 then
-    if comboTestState.detectedByEvent then return end
-    for spell, data in pairs(comboTestState.comboAutoCD) do
-      local shouldRetry = data.firstCastTime or data.castFailed
-      if shouldRetry and (now - comboTestState.lastCastTime) >= comboTestState.retryInterval then
-        say(data.spellText)
-        comboTestState.lastCastTime = now
-        data.lastSayTime = now
-        return
-      end
-    end
-  end
-
-  -- FASE 2: controle de medicao de dano
-  if comboTestState.phase == 2 then
-    -- Timeout de 30s por jutsu na fase 2
-    if comboTestState.dmgPhaseStart > 0 and (now - comboTestState.dmgPhaseStart) > 30000 then
-      -- NAO zera dano existente no timeout — preserva valor manual/anterior
-      local slot = storage.esp_combo_slots[comboTestState.slotIndex]
-      if slot and slot.jutsus[comboTestState.dmgJutsuIndex] then
-        local existing = slot.jutsus[comboTestState.dmgJutsuIndex].damage or 0
-        -- Se ja coletou algum dano parcial, salva; senao mantem o existente
-        local dr = comboTestState.dmgResults[comboTestState.dmgJutsuIndex]
-        if dr and dr.casts > 0 and dr.total > 0 then
-          slot.jutsus[comboTestState.dmgJutsuIndex].damage = math.floor(dr.total / dr.casts)
-        end
-        print("[Combo] Timeout DMG jutsu #" .. comboTestState.dmgJutsuIndex .. " — dano mantido: " .. (slot.jutsus[comboTestState.dmgJutsuIndex].damage or 0))
-      end
-      comboTestState.measuring = false
-      comboTestState.dmgWaitingCd = false
-      comboTestDmgAdvance()
-      return
-    end
-
-    -- Esperando cooldown do jutsu antes de re-castar
-    if comboTestState.dmgWaitingCd then
-      local waitTime = comboTestState.dmgWaitDuration or 500
-      if (now - comboTestState.dmgWaitStart) >= waitTime then
-        comboTestState.dmgWaitingCd = false
-        comboTestState.currentDamage = 0
-        comboTestState.measuring = true
-        comboTestState.dmgCastStart = now
-        local slot = storage.esp_combo_slots[comboTestState.slotIndex]
-        if slot and slot.jutsus[comboTestState.dmgJutsuIndex] then
-          say(slot.jutsus[comboTestState.dmgJutsuIndex].text:trim())
-          comboTestState.lastCastTime = now
-        end
-      end
-      return
-    end
-
-    -- Coletando dano: espera 2000ms apos cast para capturar projeteis
-    if comboTestState.measuring then
-      if (now - comboTestState.dmgCastStart) >= 2000 then
-        comboTestState.measuring = false
-        comboTestState.dmgCastCount = comboTestState.dmgCastCount + 1
-
-        if not comboTestState.dmgResults[comboTestState.dmgJutsuIndex] then
-          comboTestState.dmgResults[comboTestState.dmgJutsuIndex] = { total = 0, casts = 0 }
-        end
-        local dr = comboTestState.dmgResults[comboTestState.dmgJutsuIndex]
-        dr.total = dr.total + comboTestState.currentDamage
-        dr.casts = dr.casts + 1
-
-        local slot = storage.esp_combo_slots[comboTestState.slotIndex]
-        local jutsuCd = 1000
-        if slot and slot.jutsus[comboTestState.dmgJutsuIndex] then
-          jutsuCd = slot.jutsus[comboTestState.dmgJutsuIndex].cooldown or 1000
-        end
-
-        print("[Combo] DMG jutsu #" .. comboTestState.dmgJutsuIndex .. " cast " .. dr.casts .. ": " .. comboTestState.currentDamage)
-
-        if dr.casts >= 2 then
-          -- 2 medicoes feitas, salvar media e avancar
-          local avgDmg = math.floor(dr.total / dr.casts)
-          if slot and slot.jutsus[comboTestState.dmgJutsuIndex] then
-            slot.jutsus[comboTestState.dmgJutsuIndex].damage = avgDmg
-          end
-          print("[Combo] DMG jutsu #" .. comboTestState.dmgJutsuIndex .. " media: " .. avgDmg)
-          comboTestDmgAdvance()
-        else
-          -- Esperar o COOLDOWN REAL do jutsu + buffer antes do proximo cast
-          comboTestState.dmgWaitingCd = true
-          comboTestState.dmgWaitStart = now
-          comboTestState.dmgWaitDuration = math.max(jutsuCd, 500) + 500
-        end
-      end
-    end
-
-    -- Retry: se jutsu esta em CD, ficar retentando a cada 200ms
-    if not comboTestState.measuring and not comboTestState.dmgWaitingCd then
-      if (now - comboTestState.lastCastTime) >= 200 then
-        local slot = storage.esp_combo_slots[comboTestState.slotIndex]
-        if slot and slot.jutsus[comboTestState.dmgJutsuIndex] then
-          say(slot.jutsus[comboTestState.dmgJutsuIndex].text:trim())
-          comboTestState.lastCastTime = now
-        end
-      end
-    end
-  end
-end)
-
--- Avanca para proximo jutsu na fase 2 (medicao de dano)
-comboTestDmgAdvance = function()
-  if not comboTestState.active then return end
-  local slot = storage.esp_combo_slots[comboTestState.slotIndex]
-  if not slot then comboTestFinish() return end
-
-  comboTestState.dmgJutsuIndex = comboTestState.dmgJutsuIndex + 1
-  if comboTestState.dmgJutsuIndex > #slot.jutsus then
-    comboTestStartPhase3()
-    return
-  end
-
-  local jutsu = slot.jutsus[comboTestState.dmgJutsuIndex]
-  if not jutsu or not jutsu.text or jutsu.text:len() == 0 then
-    comboTestDmgAdvance()
-    return
-  end
-
-  if comboTestState.btn and not comboTestState.btn:isDestroyed() then
-    comboTestState.btn:setText("DMG " .. comboTestState.dmgJutsuIndex .. "/" .. #slot.jutsus .. "...")
-    comboTestState.btn:setColor("#FF8800")
-  end
-
-  -- Iniciar: esperar cooldown do jutsu anterior + buffer, depois castar
-  local waitTime = 500  -- buffer inicial
-  local prevIdx = comboTestState.dmgJutsuIndex - 1
-  if prevIdx >= 1 then
-    local prevJutsu = slot.jutsus[prevIdx]
-    if prevJutsu then
-      local prevCd = prevJutsu.cooldown or 1000
-      waitTime = math.max(prevCd, 500) + 500  -- CD anterior + buffer
-    end
-  end
-
-  comboTestState.currentDamage = 0
-  comboTestState.dmgCastCount = 0
-  comboTestState.measuring = false
-  comboTestState.dmgWaitingCd = true
-  comboTestState.dmgWaitStart = now
-  comboTestState.dmgWaitDuration = waitTime
-  comboTestState.dmgPhaseStart = now
-  print("[Combo] Iniciando DMG jutsu #" .. comboTestState.dmgJutsuIndex .. " (aguardando " .. waitTime .. "ms)")
-end
-
--- Inicia fase 2: medicao de dano
-comboTestStartPhase2 = function()
-  comboTestState.phase = 2
-  comboTestState.dmgJutsuIndex = 0
-  comboTestState.dmgResults = {}
-  comboTestState.measuring = false
-  comboTestState.dmgWaitingCd = false
-
-  -- Cancelar ataque para isolar dano de jutsu do dano de arma
-  if g_game.cancelAttack then
-    g_game.cancelAttack()
-  end
-
-  local slot = storage.esp_combo_slots[comboTestState.slotIndex]
-  if comboTestState.btn and not comboTestState.btn:isDestroyed() then
-    comboTestState.btn:setText("DMG 0/" .. #slot.jutsus .. "...")
-    comboTestState.btn:setColor("#FF8800")
-  end
-
-  -- Delay de 500ms para parar dano residual de arma, depois avancar
-  schedule(500, function()
-    if not comboTestState.active or comboTestState.phase ~= 2 then return end
-    comboTestDmgAdvance()
-  end)
-end
-
--- Fase 3: simular TODAS as permutacoes para achar o combo que da mais dano no menor tempo
-comboTestStartPhase3 = function()
-  comboTestState.phase = 3
-  print("[Combo] === FASE 3: Iniciando permutacoes ===")
-
-  if comboTestState.btn and not comboTestState.btn:isDestroyed() then
-    comboTestState.btn:setText("Otimizando...")
-    comboTestState.btn:setColor("#00FF88")
-  end
-
-  local slot = storage.esp_combo_slots[comboTestState.slotIndex]
-  if not slot or #slot.jutsus <= 1 then
-    print("[Combo] Apenas 1 jutsu ou nenhum — nada para permutar")
-    comboTestFinish()
-    return
-  end
-
-  -- Listar dados de cada jutsu para debug
-  local N = #slot.jutsus
-  print("[Combo] Total de jutsus: " .. N)
-  for i, j in ipairs(slot.jutsus) do
-    print("[Combo]   #" .. i .. ": " .. (j.text or "?") .. " | DMG:" .. (j.damage or 0) .. " | CD:" .. (j.cooldown or 1000) .. " | EXH:" .. (j.exhaust or 500))
-  end
-
-  -- Duracao de simulacao: quanto maior, mais preciso o DPS medio
-  local SIM_DURATION = 20000  -- 20 segundos
-
-  if N <= 8 then
-    -- Testar TODAS as permutacoes (N! combinacoes)
-    local indices = {}
-    for i = 1, N do indices[i] = i end
-    local perms = comboPermutations(indices)
-    local totalPerms = #perms
-    local bestDPS = -1
-    local bestDamage = 0
-    local bestOrder = nil
-
-    print("[Combo] Testando " .. totalPerms .. " permutacoes...")
-
-    if comboTestState.btn and not comboTestState.btn:isDestroyed() then
-      comboTestState.btn:setText("0/" .. totalPerms .. " perms...")
-      comboTestState.btn:setColor("#00FF88")
-    end
-
-    for p, order in ipairs(perms) do
-      local dmg = simulateCombo(slot.jutsus, order, SIM_DURATION)
-      local dps = dmg / (SIM_DURATION / 1000)
-      if dps > bestDPS then
-        bestDPS = dps
-        bestDamage = dmg
-        bestOrder = order
-      end
-      if p % 500 == 0 and comboTestState.btn and not comboTestState.btn:isDestroyed() then
-        comboTestState.btn:setText(p .. "/" .. totalPerms .. " perms...")
-      end
-    end
-
-    if bestOrder then
-      local newJutsus = {}
-      for _, idx in ipairs(bestOrder) do
-        table.insert(newJutsus, slot.jutsus[idx])
-      end
-      slot.jutsus = newJutsus
-      storage.esp_combo_slots[comboTestState.slotIndex] = slot
-
-      local orderStr = ""
-      for i, j in ipairs(slot.jutsus) do
-        local jdps = calcJutsuDPS(j)
-        if i > 1 then orderStr = orderStr .. " > " end
-        orderStr = orderStr .. (j.text or "?") .. " (DPS:" .. math.floor(jdps) .. " CD:" .. (j.cooldown or 1000) .. " EXH:" .. (j.exhaust or 500) .. ")"
-      end
-      print("[Combo] === MELHOR COMBO ENCONTRADO! ===")
-      print("[Combo] " .. totalPerms .. " permutacoes testadas")
-      print("[Combo] Dano em " .. (SIM_DURATION/1000) .. "s: " .. bestDamage .. " | DPS: " .. string.format("%.1f", bestDPS) .. "/s")
-      print("[Combo] Ordem: " .. orderStr)
-    else
-      print("[Combo] ERRO: nenhuma permutacao produziu resultado")
-    end
-  else
-    -- N > 8: fallback para ordenacao por DPS individual (permutacoes demais)
-    table.sort(slot.jutsus, function(a, b)
-      return calcJutsuDPS(a) > calcJutsuDPS(b)
-    end)
-    storage.esp_combo_slots[comboTestState.slotIndex] = slot
-    print("[Combo] " .. N .. " jutsus (>8) — ordenado por DPS individual (muitas permutacoes)")
-  end
-
-  comboTestFinish()
-end
-
--- Funcao que avanca a deteccao sequencial para o proximo jutsu (fase 1)
--- Aguarda o cooldown do jutsu anterior antes de testar o proximo (evita misturar cooldowns)
-comboTestAdvance = function()
-  if not comboTestState.active then return end
-  local slot = storage.esp_combo_slots[comboTestState.slotIndex]
-  if not slot then comboTestFinish() return end
-
-  comboTestState.jutsuIndex = comboTestState.jutsuIndex + 1
-  if comboTestState.jutsuIndex > #slot.jutsus then
-    print("[Combo] === FASE 1 COMPLETA: Cooldowns detectados ===")
-    -- Verificar se ja tem dano em todos os jutsus (manual ou anterior)
-    local allHaveDmg = true
-    for _, j in ipairs(slot.jutsus) do
-      if j.text and j.text:len() > 0 and (j.damage or 0) <= 0 then
-        allHaveDmg = false
-        break
-      end
-    end
-    -- Se atacando E falta dano, vai pra fase 2. Senao, direto pra fase 3.
-    if g_game.isAttacking() and not allHaveDmg then
-      print("[Combo] Atacando e falta dano — iniciando Fase 2 (medicao de dano)")
-      comboTestStartPhase2()
-    else
-      if allHaveDmg then
-        print("[Combo] Todos os jutsus ja tem dano — pulando Fase 2, direto pra permutacao")
-      else
-        print("[Combo] Nao atacando — usando dano existente para permutacao")
-      end
-      comboTestStartPhase3()
-    end
-    return
-  end
-
-  local jutsu = slot.jutsus[comboTestState.jutsuIndex]
-  if not jutsu or not jutsu.text or jutsu.text:len() == 0 then
-    comboTestAdvance()
-    return
-  end
-
-  -- Calcular delay baseado no cooldown do jutsu ANTERIOR para nao misturar cooldowns
-  local waitMs = 0
-  local prevIdx = comboTestState.jutsuIndex - 1
-  if prevIdx >= 1 then
-    local prevJutsu = slot.jutsus[prevIdx]
-    if prevJutsu then
-      local prevCd = prevJutsu.cooldown or 1000
-      local prevExh = prevJutsu.exhaust or 500
-      waitMs = math.max(prevCd, prevExh) + 500  -- espera CD completo + 500ms de margem
-    end
-  end
-
-  local spellLower = jutsu.text:trim():lower()
-  comboTestState.comboAutoCD = {}
-  comboTestState.detectedByEvent = false
-
-  if comboTestState.btn and not comboTestState.btn:isDestroyed() then
-    if waitMs > 0 then
-      comboTestState.btn:setText("Aguardando CD... " .. comboTestState.jutsuIndex .. "/" .. #slot.jutsus)
-      comboTestState.btn:setColor("#FF8800")
-    else
-      comboTestState.btn:setText("CD " .. comboTestState.jutsuIndex .. "/" .. #slot.jutsus .. "...")
-      comboTestState.btn:setColor("#FFFF00")
-    end
-  end
-
-  -- Funcao que inicia o teste do jutsu atual
-  local function startJutsuTest()
-    if not comboTestState.active or comboTestState.phase ~= 1 then return end
-
-    if comboTestState.btn and not comboTestState.btn:isDestroyed() then
-      comboTestState.btn:setText("CD " .. comboTestState.jutsuIndex .. "/" .. #slot.jutsus .. "...")
-      comboTestState.btn:setColor("#FFFF00")
-    end
-
-    comboTestState.comboAutoCD[spellLower] = {
-      castTimes = {},
-      spellText = jutsu.text:trim(),
-      slotIndex = comboTestState.slotIndex,
-      jutsuIndex = comboTestState.jutsuIndex
-    }
-
-    -- Primeiro cast
-    say(jutsu.text:trim())
-    comboTestState.lastCastTime = now
-    comboTestState.comboAutoCD[spellLower].firstCastTime = now
-    comboTestState.comboAutoCD[spellLower].lastSayTime = now
-
-    -- Timeout por jutsu (10s)
-    local currentIdx = comboTestState.jutsuIndex
-    schedule(10000, function()
-      if comboTestState.active and comboTestState.phase == 1 and comboTestState.jutsuIndex == currentIdx then
-        local data = comboTestState.comboAutoCD[spellLower]
-        if data then
-          -- Usa serverCd como fallback se disponivel
-          if data.serverCd then
-            local roundedCd = math.floor((data.serverCd + 250) / 500) * 500
-            if roundedCd < 500 then roundedCd = 500 end
-            local s = storage.esp_combo_slots[data.slotIndex]
-            if s and s.jutsus[data.jutsuIndex] then
-              s.jutsus[data.jutsuIndex].cooldown = roundedCd
-            end
-          end
-          -- Salvar castTime se parcialmente detectado
-          if data.castTimeValues and #data.castTimeValues > 0 then
-            local ctSum = 0
-            for _, v in ipairs(data.castTimeValues) do ctSum = ctSum + v end
-            local avgCt = math.floor(ctSum / #data.castTimeValues)
-            avgCt = math.floor((avgCt + 25) / 50) * 50
-            local s = storage.esp_combo_slots[data.slotIndex]
-            if s and s.jutsus[data.jutsuIndex] then
-              s.jutsus[data.jutsuIndex].castTime = avgCt
-            end
-          end
-        end
-        comboTestState.comboAutoCD[spellLower] = nil
-        comboTestAdvance()
-      end
-    end)
-  end
-
-  -- Agendar inicio do teste com delay (aguardar CD do jutsu anterior)
-  if waitMs > 0 then
-    schedule(waitMs, function()
-      startJutsuTest()
-    end)
-  else
-    startJutsuTest()
-  end
-end
-
-comboTestFinish = function()
-  print("[Combo] === TESTE FINALIZADO ===")
-  comboTestState.active = false
-  comboTestState.phase = 0
-  comboTestState.detectedByEvent = false
-  comboTestState.measuring = false
-  comboTestState.dmgWaitingCd = false
-  comboTestState.comboAutoCD = {}
-
-  if comboTestState.btn and not comboTestState.btn:isDestroyed() then
-    comboTestState.btn:setText("Testar Combo")
-    comboTestState.btn:setColor("#00CCFF")
-  end
-
-  -- Atualizar UI com a nova ordem dos jutsus
-  refreshCombos()
-
-  -- Mostrar ordem final
-  local slot = storage.esp_combo_slots[comboTestState.slotIndex]
-  if slot and slot.jutsus then
-    print("[Combo] Ordem final do combo:")
-    for i, j in ipairs(slot.jutsus) do
-      print("[Combo]   #" .. i .. ": " .. (j.text or "?") .. " | DMG:" .. (j.damage or 0) .. " | CD:" .. (j.cooldown or 1000) .. " | EXH:" .. (j.exhaust or 500))
-    end
-  end
-end
-
--- ===== Jutsu widget creation =====
+-- ===== Jutsu widget creation (simplificado) =====
 local function createJutsuWidget(slotIndex, jutsuIndex, jutsuData)
-  local dmg = jutsuData.damage or 0
-  local cd = jutsuData.cooldown or 1000
-  local exh = jutsuData.exhaust or 500
-  local ct = jutsuData.castTime or 0
-
   local entry = setupUI([[
 Panel
-  height: 120
+  height: 30
   margin-top: 3
 
   Label
     id: title
     anchors.top: parent.top
     anchors.left: parent.left
+    anchors.verticalCenter: parent.verticalCenter
     color: #FFD700
     font: verdana-11px-rounded
     text: Jutsu
@@ -1861,113 +1200,24 @@ Panel
     anchors.top: parent.top
     anchors.right: parent.right
     width: 20
-    height: 18
+    height: 22
     text: X
 
   TextEdit
     id: spellEdit
-    anchors.top: title.bottom
-    anchors.left: parent.left
-    anchors.right: parent.right
+    anchors.left: title.right
+    anchors.right: removeBtn.left
+    anchors.verticalCenter: parent.verticalCenter
     height: 22
-    margin-top: 2
-
-  Panel
-    id: cdRow
-    anchors.top: spellEdit.bottom
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 22
-    margin-top: 2
-    Label
-      anchors.left: parent.left
-      anchors.verticalCenter: parent.verticalCenter
-      text: CD (ms):
-      color: #AADDFF
-      text-auto-resize: true
-    TextEdit
-      id: cdEdit
-      anchors.right: parent.right
-      anchors.top: parent.top
-      anchors.bottom: parent.bottom
-      width: 70
-
-  Panel
-    id: exhRow
-    anchors.top: cdRow.bottom
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 22
-    margin-top: 2
-    Label
-      anchors.left: parent.left
-      anchors.verticalCenter: parent.verticalCenter
-      text: Exhaust (ms):
-      color: #FFAA55
-      text-auto-resize: true
-    TextEdit
-      id: exhEdit
-      anchors.right: parent.right
-      anchors.top: parent.top
-      anchors.bottom: parent.bottom
-      width: 70
-
-  Panel
-    id: dmgRow
-    anchors.top: exhRow.bottom
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 22
-    margin-top: 2
-    Label
-      anchors.left: parent.left
-      anchors.verticalCenter: parent.verticalCenter
-      text: DMG:
-      color: #AADDFF
-      text-auto-resize: true
-    TextEdit
-      id: dmgEdit
-      anchors.left: prev.right
-      anchors.top: parent.top
-      anchors.bottom: parent.bottom
-      width: 55
-      margin-left: 5
-    Label
-      id: dpsLabel
-      anchors.left: dmgEdit.right
-      anchors.right: parent.right
-      anchors.verticalCenter: parent.verticalCenter
-      margin-left: 8
-      color: #88FF88
-      font: verdana-11px-rounded
-      text-auto-resize: true
-      text:
+    margin-left: 5
+    margin-right: 5
 
   ]], combosContent)
 
-  entry.title:setText("Jutsu #" .. jutsuIndex)
+  entry.title:setText("#" .. jutsuIndex)
   entry.spellEdit:setText(jutsuData.text or "")
-  entry.cdRow.cdEdit:setText(tostring(cd))
-  entry.exhRow.exhEdit:setText(tostring(exh))
-  entry.dmgRow.dmgEdit:setText(tostring(dmg))
-
-  -- Mostrar DPS se disponivel
-  if dmg > 0 then
-    local effectiveTime = math.max(math.max(cd, exh) / 1000, 0.1)
-    local dps = dmg / effectiveTime
-    entry.dmgRow.dpsLabel:setText(string.format("DPS: %.1f/s", dps))
-  elseif ct > 0 then
-    entry.dmgRow.dpsLabel:setText(string.format("Cast: %dms", ct))
-  end
-
   entry.spellEdit:setBackgroundColor("#00000033")
   entry.spellEdit:setColor("#00DDFF")
-  entry.cdRow.cdEdit:setBackgroundColor("#00000033")
-  entry.cdRow.cdEdit:setColor("#00DDFF")
-  entry.exhRow.exhEdit:setBackgroundColor("#00000033")
-  entry.exhRow.exhEdit:setColor("#FFAA55")
-  entry.dmgRow.dmgEdit:setBackgroundColor("#00000033")
-  entry.dmgRow.dmgEdit:setColor("#FF8800")
 
   entry.spellEdit.onTextChange = function(w, text)
     local slot = storage.esp_combo_slots[slotIndex]
@@ -1976,42 +1226,9 @@ Panel
     end
   end
 
-  entry.cdRow.cdEdit.onTextChange = function(w, text)
-    local val = tonumber(text) or 1000
-    if val < 0 then val = 0 end
-    local slot = storage.esp_combo_slots[slotIndex]
-    if slot and slot.jutsus[jutsuIndex] then
-      slot.jutsus[jutsuIndex].cooldown = val
-    end
-  end
-
-  entry.exhRow.exhEdit.onTextChange = function(w, text)
-    local val = tonumber(text) or 500
-    if val < 0 then val = 0 end
-    local slot = storage.esp_combo_slots[slotIndex]
-    if slot and slot.jutsus[jutsuIndex] then
-      slot.jutsus[jutsuIndex].exhaust = val
-    end
-  end
-
-  entry.dmgRow.dmgEdit.onTextChange = function(w, text)
-    local val = tonumber(text) or 0
-    if val < 0 then val = 0 end
-    local slot = storage.esp_combo_slots[slotIndex]
-    if slot and slot.jutsus[jutsuIndex] then
-      slot.jutsus[jutsuIndex].damage = val
-    end
-  end
-
-  entry.spellEdit:setTooltip("Jutsu/magia do combo (ex: exori gran)")
-  entry.cdRow.cdEdit:setTooltip("Cooldown em milissegundos (500 = 0.5s, 1000 = 1s, 2000 = 2s)")
-  entry.exhRow.exhEdit:setTooltip("Exhaust global em ms (tempo minimo entre qualquer cast)")
-  entry.dmgRow.dmgEdit:setTooltip("Dano por cast (preencha manualmente ou use Testar Combo)")
-
   entry.removeBtn.onClick = function(w)
     local slot = storage.esp_combo_slots[slotIndex]
     if slot then
-      comboCooldownEnd[slotIndex][jutsuIndex] = nil
       table.remove(slot.jutsus, jutsuIndex)
     end
     refreshCombos()
@@ -2021,10 +1238,9 @@ Panel
   return entry
 end
 
--- ===== Containers for dynamic widgets (add/ok/autocd buttons) =====
+-- ===== Containers for dynamic widgets =====
 local addJutsuBtnWidget = nil
 local okCombosBtnWidget = nil
-local autoCdBtnWidget = nil
 
 -- ===== Refresh: rebuild jutsu widgets for selected combo =====
 function refreshCombos()
@@ -2033,21 +1249,16 @@ function refreshCombos()
   end
   comboWidgets = {}
 
-  -- Destroy dynamic buttons if they exist
   if addJutsuBtnWidget then addJutsuBtnWidget:destroy() addJutsuBtnWidget = nil end
-  if autoCdBtnWidget then autoCdBtnWidget:destroy() autoCdBtnWidget = nil end
   if okCombosBtnWidget then okCombosBtnWidget:destroy() okCombosBtnWidget = nil end
 
   local sel = storage.esp_combo_selected
   local slot = storage.esp_combo_slots[sel]
   if not slot then return end
 
-  -- Atualizar nome no campo
   comboNamePanel.nameEdit:setText(slot.name or ("Combo " .. sel))
-
   updateComboSelect()
 
-  -- Criar widgets para cada jutsu do combo selecionado
   for i, jutsuData in ipairs(slot.jutsus) do
     createJutsuWidget(sel, i, jutsuData)
   end
@@ -2071,53 +1282,9 @@ Panel
     local curSel = storage.esp_combo_selected
     local curSlot = storage.esp_combo_slots[curSel]
     if curSlot then
-      table.insert(curSlot.jutsus, { text = "", cooldown = 1000, exhaust = 500, damage = 0, castTime = 0 })
+      table.insert(curSlot.jutsus, { text = "" })
       refreshCombos()
     end
-  end
-
-  -- Botao unico Auto Cooldown (testa cada jutsu do combo sequencialmente)
-  autoCdBtnWidget = setupUI([[
-Panel
-  height: 25
-  margin-top: 3
-  Button
-    id: autoBtn
-    color: #00CCFF
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 25
-    text: Testar Combo
-]], combosContent)
-
-  autoCdBtnWidget.autoBtn:setTooltip("Testa cada jutsu do combo, detecta cooldowns automaticamente e ordena por maior dano")
-  autoCdBtnWidget.autoBtn.onClick = function(w)
-    local curSel = storage.esp_combo_selected
-    local curSlot = storage.esp_combo_slots[curSel]
-    if not curSlot or #curSlot.jutsus == 0 then return end
-
-    if comboTestState.active then
-      -- Cancelar deteccao em andamento
-      comboTestState.active = false
-      comboTestState.phase = 0
-      comboTestState.measuring = false
-      comboTestState.dmgWaitingCd = false
-      comboTestState.comboAutoCD = {}
-      w:setText("Testar Combo")
-      w:setColor("#00CCFF")
-      return
-    end
-
-    comboTestState.active = true
-    comboTestState.phase = 1
-    comboTestState.slotIndex = curSel
-    comboTestState.jutsuIndex = 0
-    comboTestState.btn = w
-    comboTestState.dmgResults = {}
-    w:setText("CD 0/" .. #curSlot.jutsus .. "...")
-    w:setColor("#FFFF00")
-    comboTestAdvance()
   end
 
   -- Botao OK salvar
@@ -2143,36 +1310,19 @@ end
 updateComboSelect()
 refreshCombos()
 
--- ===== Macro: executa jutsus do combo selecionado - maximo dano =====
--- Respeita exhaust (GCD global): so dispara 1 jutsu por janela de exhaust.
--- Percorre os jutsus na ordem de prioridade e dispara o primeiro disponivel.
--- Jutsus em cooldown sao pulados e voltam quando prontos.
-local espComboExhaustEnd = 0  -- timestamp global de exhaust
-
-EspComboMacro = macro(50, "Combo Especial", function()
+-- ===== Macro: executa TODOS os jutsus do combo na sequencia e recomeça =====
+EspComboMacro = macro(100, "Combo Especial", function()
   if not g_game.isAttacking() then return end
   local sel = storage.esp_combo_selected
   local slot = storage.esp_combo_slots[sel]
   if not slot then return end
-  if not comboCooldownEnd[sel] then comboCooldownEnd[sel] = {} end
 
-  -- Respeitar exhaust global: so castar quando o exhaust do ultimo cast terminar
-  if now < espComboExhaustEnd then return end
-
-  -- Encontrar o primeiro jutsu disponivel (fora de cooldown) na ordem de prioridade
-  for i, jutsu in ipairs(slot.jutsus) do
+  for _, jutsu in ipairs(slot.jutsus) do
     if jutsu.text and jutsu.text:len() > 0 then
-      local cdEnd = comboCooldownEnd[sel][i] or 0
-      if now >= cdEnd then
-        say(jutsu.text)
-        comboCooldownEnd[sel][i] = now + (jutsu.cooldown or 1000)
-        espComboExhaustEnd = now + (jutsu.exhaust or 500)
-        return  -- so 1 cast por janela de exhaust
-      end
+      say(jutsu.text)
     end
   end
 end, combosContent)
-
 
 -- =============================================
 -- TAB: BUFFS (dinamico - adicionar/remover)

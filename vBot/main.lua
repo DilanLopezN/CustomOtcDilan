@@ -84,6 +84,9 @@ espPanel7:setId("7")
 espPanel8 = g_ui.createWidget("espPanel")
 espPanel8:setId("8")
 
+espPanel9 = g_ui.createWidget("espPanel")
+espPanel9:setId("9")
+
 
 -- Carrega todo o codigo das abas especiais de especiais.lua
 -- (Fugas, Traps, Combos, Buffs, Ataque%, Stack, Retas, Perseguir)

@@ -107,6 +107,45 @@ end
     EspeciaisWindow:focus()
   end
 
+-- =============================================
+-- MACRO DELAY - Slider para delay dos macros especiais
+-- =============================================
+if not storage.esp_macro_delay then
+  storage.esp_macro_delay = 50
+end
+
+local macroDelayPanel = setupUI([[
+Panel
+  height: 38
+
+  UIWidget
+    id: delayLabel
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.top: parent.top
+    text-align: center
+    color: #FFD700
+    font: verdana-11px-rounded
+    text: Macro Delay: 50ms
+
+  HorizontalScrollBar
+    id: delayScroll
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.top: prev.bottom
+    margin-top: 3
+    minimum: 50
+    maximum: 300
+    step: 10
+]], parent)
+
+macroDelayPanel.delayScroll:setValue(storage.esp_macro_delay)
+macroDelayPanel.delayLabel:setText("Macro Delay: " .. storage.esp_macro_delay .. "ms")
+macroDelayPanel.delayScroll.onValueChange = function(widget, value)
+  storage.esp_macro_delay = value
+  macroDelayPanel.delayLabel:setText("Macro Delay: " .. value .. "ms")
+end
+
 UI.Separator()
 
 -- =============================================

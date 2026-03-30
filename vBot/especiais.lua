@@ -516,7 +516,7 @@ addBtn.addFuga.onClick = function(w)
   local newUid = fugaIdCounter
   fugaIdCounter = fugaIdCounter + 1
   table.insert(storage.esp_fugas_list, {
-    text = "fuga " .. newIndex,
+    text = "",
     hp = 50,
     activeTime = 3,
     cooldown = 10,
@@ -1025,7 +1025,7 @@ addTrapBtn.addTrap.onClick = function(w)
   local newUid = trapIdCounter
   trapIdCounter = trapIdCounter + 1
   table.insert(storage.esp_trap_list, {
-    text = "trap " .. newIndex,
+    text = "",
     cooldown = 5,
     trapTime = 3,
     hpPercent = 100,
@@ -1549,7 +1549,7 @@ addBuffBtn.addBuff.onClick = function(w)
   local newUid = buffIdCounter
   buffIdCounter = buffIdCounter + 1
   table.insert(storage.esp_buffs_list, {
-    text = "buff " .. newIndex,
+    text = "",
     activeTime = 10,
     cooldown = 30,
     uid = newUid
@@ -1899,7 +1899,7 @@ addAtaqueBtn.addAtaque.onClick = function(w)
   local newUid = ataqueIdCounter
   ataqueIdCounter = ataqueIdCounter + 1
   table.insert(storage.esp_ataque_list, {
-    spell = "ataque " .. newIndex,
+    spell = "",
     name = "",
     hp = 90,
     cd = 2,
@@ -2423,7 +2423,7 @@ addStackBtn.addStack.onClick = function(w)
   local newUid = stackIdCounter
   stackIdCounter = stackIdCounter + 1
   table.insert(storage.esp_stack_list, {
-    spell = "stack " .. newIndex,
+    spell = "",
     name = "",
     key = "WASD",
     distance = 5,
@@ -2957,7 +2957,7 @@ addRetaBtn.addReta.onClick = function(w)
   local newUid = retasIdCounter
   retasIdCounter = retasIdCounter + 1
   table.insert(storage.esp_retas_list, {
-    spell = "reta " .. newIndex,
+    spell = "",
     name = "",
     key = "AUTO",
     distance = 4,
@@ -3274,7 +3274,7 @@ addPerseguirBtn.addPerseguir.onClick = function(w)
   local newUid = perseguirIdCounter
   perseguirIdCounter = perseguirIdCounter + 1
   table.insert(storage.esp_perseguir_list, {
-    spell = "perseguir " .. newIndex,
+    spell = "",
     name = "",
     cd = 2,
     uid = newUid

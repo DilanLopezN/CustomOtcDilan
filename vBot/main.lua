@@ -117,6 +117,7 @@ end
 local macroDelayPanel = setupUI([[
 Panel
   height: 38
+  background-color: alpha
 
   UIWidget
     id: delayLabel
@@ -127,6 +128,7 @@ Panel
     color: #FFD700
     font: verdana-11px-rounded
     text: Macro Delay: 50ms
+    background-color: alpha
 
   HorizontalScrollBar
     id: delayScroll
@@ -137,14 +139,21 @@ Panel
     minimum: 50
     maximum: 300
     step: 10
+    background-color: alpha
 ]], parent)
 
+macroDelayPanel:setBackgroundColor("alpha")
+macroDelayPanel.delayScroll:setBackgroundColor("alpha")
 macroDelayPanel.delayScroll:setValue(storage.esp_macro_delay)
 macroDelayPanel.delayLabel:setText("Macro Delay: " .. storage.esp_macro_delay .. "ms")
 macroDelayPanel.delayScroll.onValueChange = function(widget, value)
   storage.esp_macro_delay = value
   macroDelayPanel.delayLabel:setText("Macro Delay: " .. value .. "ms")
 end
+
+-- Expose widgets globally for visual_custom.lua color styling
+_G.macroDelayLabel = macroDelayPanel.delayLabel
+_G.especiaisButton = ui.editEspeciais
 
 UI.Separator()
 
@@ -199,6 +208,25 @@ do
     return fixed
   end
 
+  -- Funcao para limpar storage do perfil (para perfis novos)
+  local function clearProfileStorage()
+    storage.esp_fugas_list = {}
+    storage.esp_fugas_widgets_show = {}
+    storage.esp_fugas_widgets_pos = {}
+    storage.esp_trap_list = {}
+    storage.esp_combo_slots = {}
+    storage.esp_combo_selected = 1
+    storage.esp_buffs_list = {}
+    storage.esp_ataque_list = {}
+    storage.esp_stack_list = {}
+    storage.esp_retas_list = {}
+    storage.esp_perseguir_list = {}
+    storage.esp_auto_kai = {}
+    storage.ingame_hotkeys = ""
+    storage.bgPlayer = {}
+    storage.esp_macro_delay = 50
+  end
+
   -- Funcao para coletar dados do perfil atual
   local function collectProfileData()
     local data = {}
@@ -227,6 +255,10 @@ do
     data.ingame_hotkeys = storage.ingame_hotkeys or ""
     -- Background
     data.bgPlayer = deepCopy(storage.bgPlayer or {})
+    -- Macro Delay
+    data.esp_macro_delay = storage.esp_macro_delay or 50
+    -- Visual Custom (cores)
+    data.visualCustom = deepCopy(storage.visualCustom or {})
     return data
   end
 
@@ -310,6 +342,27 @@ do
     if data.esp_auto_kai then storage.esp_auto_kai = deepCopy(data.esp_auto_kai) end
     if data.ingame_hotkeys ~= nil then storage.ingame_hotkeys = data.ingame_hotkeys end
     if data.bgPlayer then storage.bgPlayer = deepCopy(data.bgPlayer) end
+
+    -- Macro Delay
+    if data.esp_macro_delay then
+      storage.esp_macro_delay = data.esp_macro_delay
+      schedule(200, function()
+        if macroDelayPanel and macroDelayPanel.delayScroll then
+          macroDelayPanel.delayScroll:setValue(storage.esp_macro_delay)
+          macroDelayPanel.delayLabel:setText("Macro Delay: " .. storage.esp_macro_delay .. "ms")
+        end
+      end)
+    end
+
+    -- Visual Custom (cores)
+    if data.visualCustom then
+      storage.visualCustom = deepCopy(data.visualCustom)
+      corText = storage.visualCustom.corText or "#00AAFF"
+      schedule(400, function()
+        if applyAllVisuals then applyAllVisuals() end
+        if applyMacrosBorder then applyMacrosBorder() end
+      end)
+    end
 
     storage.perfis_current = data._originalName or charName
 
@@ -395,6 +448,7 @@ Panel
 
   ]], parent)
   perfisUI:setId(perfisPanelName)
+  _G.perfisButton = perfisUI.editPerfis
 
   -- Janela de perfis
   local PerfisWindow
@@ -700,8 +754,20 @@ MainWindow
             -- Perfil existe, carregar automaticamente
             loadProfile(charName)
           else
-            -- Novo personagem, salvar perfil inicial
+            -- Novo personagem, limpar storage e salvar perfil vazio
+            clearProfileStorage()
             saveProfile(charName)
+            -- Refresh UI after clearing
+            schedule(200, function()
+              if refreshFugas then refreshFugas() end
+              if refreshCombos then refreshCombos() end
+              if refreshBuffs then refreshBuffs() end
+              if refreshTraps then refreshTraps() end
+              if refreshAtaques then refreshAtaques() end
+              if refreshStacks then refreshStacks() end
+              if refreshRetas then refreshRetas() end
+              if refreshPerseguir then refreshPerseguir() end
+            end)
           end
         end
       end

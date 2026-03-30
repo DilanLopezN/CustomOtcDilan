@@ -327,9 +327,23 @@ function applyMacrosBorder()
     end
 end
 
-local function applyAllVisuals()
+-- Aplicar corText aos botoes/labels principais (ESPECIAIS, Macro Delay, PERFIS)
+local function applyMainButtonColors()
+    if _G.especiaisButton then
+        _G.especiaisButton:setColor(corText)
+    end
+    if _G.macroDelayLabel then
+        _G.macroDelayLabel:setColor(corText)
+    end
+    if _G.perfisButton then
+        _G.perfisButton:setColor(corText)
+    end
+end
+
+function applyAllVisuals()
     applyButtonStyle()
     applySeparatorHide()
+    applyMainButtonColors()
     -- Tabs need a small delay since they may not be fully loaded
     schedule(200, function()
         applyTabStyle()

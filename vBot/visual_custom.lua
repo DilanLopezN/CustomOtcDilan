@@ -335,6 +335,12 @@ local function applyMainButtonColors()
     if macroDelayLabel then
         macroDelayLabel:setColor(corText)
     end
+    if macroDelayBtnLeft then
+        macroDelayBtnLeft:setColor(corText)
+    end
+    if macroDelayBtnRight then
+        macroDelayBtnRight:setColor(corText)
+    end
     if perfisButton then
         perfisButton:setColor(corText)
     end

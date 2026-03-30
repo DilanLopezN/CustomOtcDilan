@@ -15,6 +15,7 @@ CustomTabBarButton < UIButton
   border-width: 0
   text-align: center
   text-auto-resize: true
+  font: verdana-11px-rounded
   image-source:
 
   $checked:

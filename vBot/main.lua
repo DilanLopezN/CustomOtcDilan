@@ -152,8 +152,8 @@ macroDelayPanel.delayScroll.onValueChange = function(widget, value)
 end
 
 -- Expose widgets globally for visual_custom.lua color styling
-_G.macroDelayLabel = macroDelayPanel.delayLabel
-_G.especiaisButton = ui.editEspeciais
+macroDelayLabel = macroDelayPanel.delayLabel
+especiaisButton = ui.editEspeciais
 
 UI.Separator()
 
@@ -448,7 +448,7 @@ Panel
 
   ]], parent)
   perfisUI:setId(perfisPanelName)
-  _G.perfisButton = perfisUI.editPerfis
+  perfisButton = perfisUI.editPerfis
 
   -- Janela de perfis
   local PerfisWindow

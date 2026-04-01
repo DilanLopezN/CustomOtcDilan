@@ -609,7 +609,9 @@ local autoKaiMacro = macro(100, "Kai", function()
   local spellKai = storage.esp_auto_kai.spell or "kai"
   if spellKai:len() == 0 then return end
   if isParalyzed() and not getSpellCoolDown(spellKai) then
+    if not espCheckMacroDelay() then return end
     say(spellKai)
+    espMarkMacroUsed()
   end
 end, fugasContent)
 
@@ -697,7 +699,12 @@ EspFugaMacro = macro(200, "Fugas Especiais", function()
 
       fugaActive = true
 
+      if not espCheckMacroDelay() then
+        fugaActive = false
+        return
+      end
       say(f.text)
+      espMarkMacroUsed()
 
       fugaUsesLeft[uid] = fugaUsesLeft[uid] - 1
 
@@ -1095,7 +1102,9 @@ EspTrapMacro = macro(200, "Traps", function()
       if targetHpPercent <= hpThreshold then
         -- Checa se nao esta em cooldown e nao esta ativa
         if now >= cdEnd and now >= activeEnd then
+          if not espCheckMacroDelay() then return end
           say(trap.text)
+          espMarkMacroUsed()
           trapActiveEnd[uid] = now + trapTimeMs
           trapCooldownEnd[uid] = now + trapTimeMs + cooldownMs
           break  -- Usa uma trap por ciclo
@@ -1354,6 +1363,7 @@ refreshCombos()
 -- ===== Macro: executa TODOS os jutsus do combo na sequencia e recomeça =====
 EspComboMacro = macro(100, "Combo Especial", function()
   if not g_game.isAttacking() then return end
+  if not espCheckMacroDelay() then return end
   local sel = storage.esp_combo_selected
   local slot = storage.esp_combo_slots[sel]
   if not slot then return end
@@ -1363,6 +1373,7 @@ EspComboMacro = macro(100, "Combo Especial", function()
       say(jutsu.text)
     end
   end
+  espMarkMacroUsed()
 end, combosContent)
 
 -- =============================================
@@ -1590,9 +1601,12 @@ EspBuffMacro = macro(200, "Buffs Auto", function()
 
       -- Se o buff nao esta ativo e nao esta em CD, usa
       if now >= activeEnd and now >= cdEnd then
+        if not espCheckMacroDelay() then return end
         say(b.text)
+        espMarkMacroUsed()
         buffActiveEnd[uid] = now + activeTimeMs
         buffCooldownEnd[uid] = now + activeTimeMs + cooldownMs
+        break  -- Usa um buff por ciclo para o servidor processar corretamente
       end
     end
   end
@@ -1707,7 +1721,9 @@ EspAtaqueMacro = macro(100, "Ataque HP% Esp", function()
         if atk.spell and atk.spell ~= "" and targetHp <= (atk.hp or 100) then
             local uid = atk.uid
             if now >= (ataqueCooldownEnd[uid] or 0) then
+                if not espCheckMacroDelay() then return end
                 say(atk.spell)
+                espMarkMacroUsed()
                 ataqueCooldownEnd[uid] = now + ((atk.cd or 2) * 1000)
                 return
             end
@@ -2179,6 +2195,7 @@ EspStackMacro = macro(50, "Stack Esp", function()
                         local creature = getStackingMonster(dir, stk.distance or 5)
 
                         if creature then
+                            if not espCheckMacroDelay() then return end
                             -- 1. Ataca o monstro (seleciona como alvo)
                             g_game.attack(creature)
 
@@ -2186,6 +2203,7 @@ EspStackMacro = macro(50, "Stack Esp", function()
                             local spellText = stk.spell
                             schedule(50, function()
                                 say(spellText)
+                                espMarkMacroUsed()
                             end)
 
                             -- 3. Apos 200ms, cancela o ataque (envia attack nil)
@@ -2687,7 +2705,9 @@ EspRetasMacro = macro(100, "Retas Esp", function()
                     local targetHp = target:getHealthPercent()
                     if targetHp and targetHp <= hpLimit then
                         if canUseReta(target) then
+                            if not espCheckMacroDelay() then return end
                             say(ret.spell)
+                            espMarkMacroUsed()
                             retasCooldownEnd[uid] = now + ((ret.cd or 2) * 1000)
                             return
                         end
@@ -3098,7 +3118,9 @@ EspPerseguirMacro = macro(100, "Perseguir Esp", function()
         if per.spell and per.spell ~= "" and per.enabled ~= false then
             local uid = per.uid
             if now >= (perseguirCooldownEnd[uid] or 0) then
+                if not espCheckMacroDelay() then return end
                 say(per.spell)
+                espMarkMacroUsed()
                 perseguirCooldownEnd[uid] = now + ((per.cd or 2) * 1000)
                 return
             end
@@ -3422,7 +3444,9 @@ EspGenjutsuMacro = macro(100, "Genjutsus Esp", function()
                 -- Defensivo: solta quando MEU HP <= threshold E nenhuma fuga disponivel
                 if myHp <= hpThreshold and not isAnyFugaAvailable() then
                     if now >= (genjutsuCooldownEnd[uid] or 0) then
+                        if not espCheckMacroDelay() then return end
                         say(gen.spell)
+                        espMarkMacroUsed()
                         genjutsuCooldownEnd[uid] = now + ((gen.cd or 5) * 1000)
                         return
                     end
@@ -3431,7 +3455,9 @@ EspGenjutsuMacro = macro(100, "Genjutsus Esp", function()
                 -- Ofensivo: solta quando HP do OPONENTE <= threshold
                 if targetHp <= hpThreshold then
                     if now >= (genjutsuCooldownEnd[uid] or 0) then
+                        if not espCheckMacroDelay() then return end
                         say(gen.spell)
+                        espMarkMacroUsed()
                         genjutsuCooldownEnd[uid] = now + ((gen.cd or 5) * 1000)
                         return
                     end

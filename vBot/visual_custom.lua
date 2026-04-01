@@ -10,7 +10,8 @@ storage.visualCustom = storage.visualCustom or {
     styleButtons = true,
     styleTabs = true,
     hideSeparators = true,
-    styleMacros = true
+    styleMacros = true,
+    shadowColor = "#000000"
 }
 
 corText = storage.visualCustom.corText or "#00AAFF"
@@ -223,19 +224,39 @@ local function applyButtonStyle()
     modules.game_bot.contentsPanel.enableButton:setImageSource("")
 end
 
-local function applyTabStyle()
+local tabShadowLabels = {}
+
+function applyTabStyle()
     if not storage.visualCustom.styleTabs then return end
+
+    -- Limpar sombras anteriores
+    for _, shadow in ipairs(tabShadowLabels) do
+        if shadow and shadow:getParent() then
+            shadow:destroy()
+        end
+    end
+    tabShadowLabels = {}
+
+    local shadowColor = storage.visualCustom.shadowColor or "#000000"
 
     local botTabs = modules.game_bot.contentsPanel and modules.game_bot.contentsPanel.botTabs
     if botTabs and botTabs.tabs then
         for _, tab in pairs(botTabs.tabs) do
             tab:setStyle("CustomTabBarButton")
             tab:setColor(corText)
-            tab:setBorderColor(corText)
-            tab:setFont("terminus-14px-bold")
-            -- Neon glow: borda colorida ao redor do texto
-            tab:setBorderWidth(1)
-            tab:setBorderColor(corText)
+            tab:setFont("verdana-11px-rounded")
+            tab:setBorderWidth(0)
+
+            -- Criar label sombra atras do texto da tab
+            local shadow = g_ui.createWidget("Label", tab)
+            shadow:setText(tab:getText())
+            shadow:setFont("verdana-11px-rounded")
+            shadow:setColor(shadowColor)
+            shadow:setTextOffset({x = 1, y = 1})
+            shadow:fill("parent")
+            shadow:setPhantom(true)
+            shadow:lower()
+            table.insert(tabShadowLabels, shadow)
         end
     end
 end

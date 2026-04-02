@@ -56,6 +56,18 @@ if rootWidget then
     EspeciaisWindow = UI.createWidget('espEspeciaisWindow', rootWidget)
     EspeciaisWindow:hide()
     EspComboBox = EspeciaisWindow.espComboBox
+
+    -- Salvar Tudo button with visual feedback
+    EspeciaisWindow.salvarTudoBtn.onClick = function(widget)
+      saveEspeciaisProfile()
+      widget:setText("Salvo!")
+      widget:setColor("#FFD700")
+      schedule(1500, function()
+        widget:setText("Salvar Tudo")
+        widget:setColor("#00FF88")
+      end)
+    end
+
    for v = 1, 1 do
 
 

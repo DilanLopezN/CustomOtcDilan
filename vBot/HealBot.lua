@@ -713,68 +713,6 @@ end)
 
 
 
-local qqcoisa = addLabel("POTIONS", "POTIONS")
-qqcoisa:setColor("orange")
-
--- Great Health Potion 50%
-testMacro = macro(100, "Pot Heal 50", function()
-  if (hppercent() <= 50) then
-    usewith(107, player) 
-  end
-end)
-test1 = addIcon("50", {item =107, text = "Pot50"}, testMacro )
-test1:breakAnchors()
-test1:move(400, 100)
-
--- Great Health Potion 75%
-testMacro = macro(100, "Pot Heal 75", function()
-  if (hppercent() <= 75) then
-    usewith(107, player) 
-  end
-end)
-test1 = addIcon("75", {item =107, text = "Pot 75"}, testMacro )
-test1:breakAnchors()
-test1:move(450, 100)
-
--- Great Health Potion 90%
-testMacro = macro(100, "Pot Heal 90", function()
-  if (hppercent() <= 90) then
-    usewith(107, player) 
-  end
-end)
-test1 = addIcon("90", {item =107, text = "Pot 90"}, testMacro )
-test1:breakAnchors()
-test1:move(500, 100)
-
--- Perfect Health Potion 60%
-testMacro = macro(100, "Pot Perfect 60", function()
-  if (hppercent() <= 60) then
-    usewith(11813, player) 
-  end
-end)
-test1 = addIcon("60", {item =11813, text = "Pot 60"}, testMacro )
-test1:breakAnchors()
-test1:move(550, 100)
-
--- Great Chakra Potion 30%
-testMacro = macro(100, "PotMana 30", function()
-  if (manapercent() <= 30) then
-    usewith(3027, player) 
-  end
-end)
-test1 = addIcon("30", {item =3027, text = "Pot 30"}, testMacro )
-test1:breakAnchors()
-test1:move(600, 100)
-
--- Perfect Chakra Potion 30%
-testMacro = macro(100, "PotMana Perfect 30", function()
-  if (manapercent() <= 30) then
-    usewith(11815, player) 
-  end
-end)
-test1 = addIcon("30", {item =11815, text = "Pot 30"}, testMacro )
-test1:breakAnchors()
-test1:move(650, 100)
 
 -- Configuração Bijuu Outfit ID
 storage.bijuuOutfitId = storage.bijuuOutfitId or "158"
@@ -813,9 +751,53 @@ end)
 -- SISTEMA DE POTES MANUAL (HP E MANA)
 -- =============================================
 
+-- Migration: fix potion IDs for existing users
+if not storage.potionIdsFixed then
+  storage.hpPotion1 = {enabled = false, item = 107, min = 0, max = 60}
+  storage.hpPotion2 = {enabled = false, item = 11813, min = 0, max = 40}
+  storage.manaPotion1 = {enabled = false, item = 3027, min = 0, max = 60}
+  storage.manaPotion2 = {enabled = false, item = 11815, min = 0, max = 40}
+  storage.potionIdsFixed = true
+end
+
+-- Potion delay config
+storage.potionMacroDelay = storage.potionMacroDelay or 200
+
+local potDelayPanel = setupUI([[
+Panel
+  height: 38
+  Label
+    id: label
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text-align: center
+    color: #FFD700
+    font: verdana-11px-rounded
+    text: Potion Delay: 200ms
+  HorizontalScrollBar
+    id: scroll
+    anchors.top: prev.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 2
+    minimum: 50
+    maximum: 500
+    step: 10
+]], hpPanel2)
+
+potDelayPanel.scroll:setValue(storage.potionMacroDelay)
+potDelayPanel.label:setText("Potion Delay: " .. storage.potionMacroDelay .. "ms")
+potDelayPanel.scroll.onValueChange = function(widget, value)
+  storage.potionMacroDelay = value
+  potDelayPanel.label:setText("Potion Delay: " .. value .. "ms")
+end
+
+UI.Separator(hpPanel2)
+
 -- HP Potion 1
 if type(storage.hpPotion1) ~= "table" then
-    storage.hpPotion1 = {enabled = false, item = 268, min = 0, max = 60}
+    storage.hpPotion1 = {enabled = false, item = 107, min = 0, max = 60}
 end
 
 local hpPotion1Panel = setupUI([[
@@ -867,17 +849,11 @@ hpPotion1Panel.scroll.onValueChange = function(widget, value)
     hpPotion1Panel.label:setText("HP <= " .. value .. "%")
 end
 
-macro(200, function()
-    if storage.hpPotion1.enabled and hppercent() <= storage.hpPotion1.max then
-        useWith(storage.hpPotion1.item, player)
-    end
-end)
-
 UI.Separator(hpPanel2)
 
 -- HP Potion 2
 if type(storage.hpPotion2) ~= "table" then
-    storage.hpPotion2 = {enabled = false, item = 266, min = 0, max = 40}
+    storage.hpPotion2 = {enabled = false, item = 11813, min = 0, max = 40}
 end
 
 local hpPotion2Panel = setupUI([[
@@ -929,17 +905,11 @@ hpPotion2Panel.scroll.onValueChange = function(widget, value)
     hpPotion2Panel.label:setText("HP <= " .. value .. "%")
 end
 
-macro(200, function()
-    if storage.hpPotion2.enabled and hppercent() <= storage.hpPotion2.max then
-        useWith(storage.hpPotion2.item, player)
-    end
-end)
-
 UI.Separator(hpPanel2)
 
 -- Mana Potion 1
 if type(storage.manaPotion1) ~= "table" then
-    storage.manaPotion1 = {enabled = false, item = 268, min = 0, max = 60}
+    storage.manaPotion1 = {enabled = false, item = 3027, min = 0, max = 60}
 end
 
 local manaPotion1Panel = setupUI([[
@@ -991,17 +961,11 @@ manaPotion1Panel.scroll.onValueChange = function(widget, value)
     manaPotion1Panel.label:setText("Mana <= " .. value .. "%")
 end
 
-macro(200, function()
-    if storage.manaPotion1.enabled and manapercent() <= storage.manaPotion1.max then
-        useWith(storage.manaPotion1.item, player)
-    end
-end)
-
 UI.Separator(hpPanel2)
 
 -- Mana Potion 2
 if type(storage.manaPotion2) ~= "table" then
-    storage.manaPotion2 = {enabled = false, item = 268, min = 0, max = 40}
+    storage.manaPotion2 = {enabled = false, item = 11815, min = 0, max = 40}
 end
 
 local manaPotion2Panel = setupUI([[
@@ -1053,8 +1017,30 @@ manaPotion2Panel.scroll.onValueChange = function(widget, value)
     manaPotion2Panel.label:setText("Mana <= " .. value .. "%")
 end
 
-macro(200, function()
+-- Consolidated potion macro with configurable delay
+local lastPotionUse = 0
+
+macro(50, function()
+    if now - lastPotionUse < storage.potionMacroDelay then return end
+
+    if storage.hpPotion1.enabled and hppercent() <= storage.hpPotion1.max then
+        useWith(storage.hpPotion1.item, player)
+        lastPotionUse = now
+        return
+    end
+    if storage.hpPotion2.enabled and hppercent() <= storage.hpPotion2.max then
+        useWith(storage.hpPotion2.item, player)
+        lastPotionUse = now
+        return
+    end
+    if storage.manaPotion1.enabled and manapercent() <= storage.manaPotion1.max then
+        useWith(storage.manaPotion1.item, player)
+        lastPotionUse = now
+        return
+    end
     if storage.manaPotion2.enabled and manapercent() <= storage.manaPotion2.max then
         useWith(storage.manaPotion2.item, player)
+        lastPotionUse = now
+        return
     end
 end)

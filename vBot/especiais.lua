@@ -139,8 +139,8 @@ local function createFugaScreenWidget(uid, fugaData, displayIndex)
 
   local screenWidget = g_ui.loadUIFromString([[
 UIWidget
-  background-color: #000000cc
-  opacity: 0.90
+  background-color: #00000000
+  opacity: 1.0
   height: 26
   width: 280
   focusable: true
@@ -153,7 +153,7 @@ UIWidget
     text-align: center
     font: verdana-11px-rounded
     color: green
-    text: Pronta
+    text: OK
     padding: 2
     text-auto-resize: true
 ]], g_ui.getRootWidget())
@@ -186,7 +186,7 @@ UIWidget
   end
 
   local spellName = fugaData.text or ("Fuga #" .. displayIndex)
-  screenWidget.statusText:setText(spellName .. " | PRONTA")
+  screenWidget.statusText:setText(spellName .. " | OK")
 
   -- Sempre visivel quando criado (so e criado se checkbox ativo)
   screenWidget:show()
@@ -566,7 +566,7 @@ macro(200, function()
           local left = usesRemaining or qtd
           usesInfo = " [" .. left .. "x]"
         end
-        sw.statusText:setText(spellName .. " | PRONTA" .. usesInfo)
+        sw.statusText:setText(spellName .. " | OK" .. usesInfo)
         sw.statusText:setColor("#00FF00")
       end
     end
@@ -684,8 +684,6 @@ EspFugaMacro = macro(200, "Fugas Especiais", function()
       say(f.text)
       espMarkMacroUsed()
 
-      fugaUsesLeft[uid] = fugaUsesLeft[uid] - 1
-
       -- Funcao para restaurar todos os macros ao estado anterior
       local function restaurarMacros()
         fugaActive = false
@@ -706,20 +704,45 @@ EspFugaMacro = macro(200, "Fugas Especiais", function()
         end
       end
 
-      if fugaUsesLeft[uid] <= 0 then
-        -- Acabou os usos, entra em cooldown total
-        fugaUsesLeft[uid] = maxUses
-        fugaActiveEnd[uid] = now + activeTimeMs
-        fugaCooldownEnd[uid] = now + activeTimeMs + cooldownMs
+      -- Funcao para aplicar cooldowns e agendar restauracao
+      local function aplicarCooldownsERestaurar()
+        fugaUsesLeft[uid] = fugaUsesLeft[uid] - 1
 
-        schedule(activeTimeMs, restaurarMacros)
-      else
-        -- Ainda tem usos, cooldown curto entre usos
-        fugaActiveEnd[uid] = now + activeTimeMs
-        fugaCooldownEnd[uid] = now + cdQtdMs
-
-        schedule(activeTimeMs, restaurarMacros)
+        if fugaUsesLeft[uid] <= 0 then
+          fugaUsesLeft[uid] = maxUses
+          fugaActiveEnd[uid] = now + activeTimeMs
+          fugaCooldownEnd[uid] = now + activeTimeMs + cooldownMs
+          schedule(activeTimeMs, restaurarMacros)
+        else
+          fugaActiveEnd[uid] = now + activeTimeMs
+          fugaCooldownEnd[uid] = now + cdQtdMs
+          schedule(activeTimeMs, restaurarMacros)
+        end
       end
+
+      -- Confirmacao via spell cooldown: verifica se a fuga realmente foi castada in-game
+      local spellText = f.text
+      schedule(150, function()
+        local data = getSpellData(spellText:lower())
+        local confirmed = false
+        if data then
+          confirmed = getSpellCoolDown(spellText:lower()) == true
+        end
+
+        if confirmed then
+          -- Fuga confirmada pelo servidor, aplica cooldowns
+          aplicarCooldownsERestaurar()
+        else
+          -- Nao confirmou, retenta a fuga
+          say(spellText)
+          espMarkMacroUsed()
+          -- Segunda confirmacao apos 150ms
+          schedule(150, function()
+            -- Aplica cooldowns independente para nao ficar travado
+            aplicarCooldownsERestaurar()
+          end)
+        end
+      end)
 
       break
     end

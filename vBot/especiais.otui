@@ -27,15 +27,17 @@ espEspeciaisWindow < MainWindow
   color: orange
   @onEscape: self:hide()
 
-  TabBar
-    id: espTabBar
+  ComboBox
+    id: espComboBox
     anchors.top: parent.top
     anchors.left: parent.left
     anchors.right: parent.right
+    height: 20
+    margin-bottom: 5
 
   Panel
     id: espImagem
-    anchors.top: espTabBar.bottom
+    anchors.top: espComboBox.bottom
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.bottom: parent.bottom

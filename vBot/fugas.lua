@@ -18,9 +18,9 @@ local fuga5LastUse = 0
 -- Widget para mostrar cooldowns na tela
 local fugaWidget = setupUI([[
 UIWidget
-  background-color: black
+  background-color: #00000000
   font: verdana-11px-rounded
-  opacity: 0.70
+  opacity: 1.0
   padding: 5 10
   focusable: true
   phantom: false
@@ -81,19 +81,24 @@ local function isFugaReady(i, fuga)
     return now >= cdTime
 end
 
--- Função para usar uma fuga (3x say garantido)
-local function useFuga(i, fuga)
+-- Função para confirmar se a fuga foi realmente usada in-game via cooldown do spell
+local function confirmFugaCast(spell)
+    if not spell or spell == "" then return false end
+    local data = getSpellData(spell:lower())
+    if data then
+        return getSpellCoolDown(spell:lower()) == true
+    end
+    return false
+end
+
+-- Função para aplicar cooldowns internos da fuga
+local function applyFugaCooldowns(i, fuga)
     local duration = (fuga.duration or 0) * 1000
     local cd = (fuga.cd or 30) * 1000
-    
-    say(fuga.spell)
-    say(fuga.spell)
-    say(fuga.spell)
-    
+
     if i == 5 and fuga.multiUse and fuga.multiUse > 1 then
         fuga5Uses = fuga5Uses + 1
         fuga5LastUse = now
-        
         if fuga5Uses >= fuga.multiUse then
             fugaDurations[i] = duration > 0 and (now + duration) or 0
             fugaCooldowns[i] = now + (duration > 0 and duration or 0) + cd
@@ -102,7 +107,32 @@ local function useFuga(i, fuga)
         fugaDurations[i] = duration > 0 and (now + duration) or 0
         fugaCooldowns[i] = now + (duration > 0 and duration or 0) + cd
     end
-    
+end
+
+-- Função para usar uma fuga com confirmação via spell cooldown
+local function useFuga(i, fuga)
+    say(fuga.spell)
+    say(fuga.spell)
+    say(fuga.spell)
+
+    -- Confirmação: apos 150ms verifica se o spell entrou em cooldown in-game
+    schedule(150, function()
+        if confirmFugaCast(fuga.spell) then
+            -- Spell confirmado, aplica cooldowns
+            applyFugaCooldowns(i, fuga)
+        else
+            -- Não confirmou, tenta novamente
+            say(fuga.spell)
+            say(fuga.spell)
+            say(fuga.spell)
+            -- Segunda confirmação apos mais 150ms
+            schedule(150, function()
+                -- Aplica cooldowns independente (evita ficar travado)
+                applyFugaCooldowns(i, fuga)
+            end)
+        end
+    end)
+
     return true
 end
 
@@ -151,7 +181,7 @@ macro(100, function()
                 elseif fuga5Uses > 0 and fuga5Uses < fuga.multiUse then
                     status = usesLeft .. "x [RESTAM]"
                 else
-                    status = "PRONTO [" .. fuga.multiUse .. "x]"
+                    status = "OK [" .. fuga.multiUse .. "x]"
                 end
             else
                 if durTime > 0 and now < durTime then
@@ -159,7 +189,7 @@ macro(100, function()
                 elseif cdTime > 0 and now < cdTime then
                     status = math.ceil((cdTime - now) / 1000) .. "s [CD]"
                 else
-                    status = "PRONTO"
+                    status = "OK"
                 end
             end
             

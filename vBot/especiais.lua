@@ -53,12 +53,7 @@ end
 -- =============================================
 -- TAB: FUGAS (dinamico)
 -- =============================================
-EspTabBar:addTab("Fugas", espPanel1)
 local fugasContent = espPanel1.scrollArea
-        UI.Separator(fugasContent)
-        color= UI.Label("Fugas (tempo em segundos):",fugasContent)
-color:setColor("red")
-        UI.Separator(fugasContent)
 
 -- Storage: lista de fugas
 if type(storage.esp_fugas_list) ~= "table" then
@@ -753,12 +748,7 @@ end, fugasContent)
 -- =============================================
 -- TAB: TRAPS (dinamico - adicionar/remover/ordenar)
 -- =============================================
-EspTabBar:addTab("Traps", espPanel2)
 local trapsContent = espPanel2.scrollArea
-        UI.Separator(trapsContent)
-        color= UI.Label("Traps / Armadilhas:",trapsContent)
-color:setColor("red")
-        UI.Separator(trapsContent)
 
 -- Storage: lista de traps (formato novo)
 if type(storage.esp_trap_list) ~= "table" then
@@ -1118,9 +1108,7 @@ end, trapsContent)
 -- =============================================
 -- TAB: COMBOS (5 slots, cada combo = lista de jutsus)
 -- =============================================
-EspTabBar:addTab("Combos", espPanel3)
 local combosContent = espPanel3.scrollArea
-        UI.Separator(combosContent)
 
 -- ===== Storage: 5 combo slots =====
 if type(storage.esp_combo_slots) ~= "table" then
@@ -1379,12 +1367,7 @@ end, combosContent)
 -- =============================================
 -- TAB: BUFFS (dinamico - adicionar/remover)
 -- =============================================
-EspTabBar:addTab("Buffs", espPanel4)
 local buffsContent = espPanel4.scrollArea
-        UI.Separator(buffsContent)
-        color= UI.Label("Buffs (tempo em segundos):",buffsContent)
-color:setColor("#00CCFF")
-        UI.Separator(buffsContent)
 
 -- Storage: lista de buffs
 if type(storage.esp_buffs_list) ~= "table" then
@@ -1616,12 +1599,7 @@ end, buffsContent)
 -- =============================================
 -- TAB: ATAQUE % (dinamico - adicionar/remover)
 -- =============================================
-EspTabBar:addTab("Ataque %", espPanel5)
 local ataqueContent = espPanel5.scrollArea
-        UI.Separator(ataqueContent)
-        color= UI.Label("Ataques por HP% do Inimigo:",ataqueContent)
-color:setColor("#FF6600")
-        UI.Separator(ataqueContent)
 
 -- Storage: lista de ataques
 if type(storage.esp_ataque_list) ~= "table" then
@@ -1943,12 +1921,7 @@ end
 -- Novo sistema: Botao direito do mouse + tecla direcional
 -- Suporta WASD (8 direcoes) e Arrows (4 direcoes)
 -- =============================================
-EspTabBar:addTab("Stack", espPanel6)
 local stackContent = espPanel6.scrollArea
-        UI.Separator(stackContent)
-        color= UI.Label("Stack (botao do meio + direcional):",stackContent)
-color:setColor("#FF00FF")
-        UI.Separator(stackContent)
 
 -- Storage: lista de stacks
 if type(storage.esp_stack_list) ~= "table" then
@@ -2466,12 +2439,7 @@ end
 -- =============================================
 -- TAB: RETAS (dinamico - adicionar/remover)
 -- =============================================
-EspTabBar:addTab("Retas", espPanel7)
 local retasContent = espPanel7.scrollArea
-        UI.Separator(retasContent)
-        color= UI.Label("Retas (alinhar e atacar em reta):",retasContent)
-color:setColor("#00FF88")
-        UI.Separator(retasContent)
 
 -- Storage: lista de retas
 if type(storage.esp_retas_list) ~= "table" then
@@ -3000,12 +2968,7 @@ end
 -- Se inimigo targetado >= 4 sqm, usa a skill configurada
 -- Se <= 3 sqm, nao faz nada
 -- =============================================
-EspTabBar:addTab("Perseguir", espPanel8)
 local perseguirContent = espPanel8.scrollArea
-        UI.Separator(perseguirContent)
-        color= UI.Label("Perseguir (skill se alvo >= 4 sqm):",perseguirContent)
-color:setColor("#FF8800")
-        UI.Separator(perseguirContent)
 
 -- Storage: lista de perseguir
 if type(storage.esp_perseguir_list) ~= "table" then
@@ -3314,12 +3277,7 @@ end
 -- Defensivo: solta baseado na vida do MEU personagem + sem fuga disponivel
 -- Ofensivo: solta baseado na vida do OPONENTE
 -- =============================================
-EspTabBar:addTab("Genjutsus", espPanel9)
 local genjutsuContent = espPanel9.scrollArea
-        UI.Separator(genjutsuContent)
-        color= UI.Label("Genjutsus (Defensivo / Ofensivo):",genjutsuContent)
-color:setColor("#CC00FF")
-        UI.Separator(genjutsuContent)
 
 -- Storage: lista de genjutsus
 if type(storage.esp_genjutsu_list) ~= "table" then

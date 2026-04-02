@@ -33,6 +33,10 @@ function saveEspeciaisProfile()
       data.esp_auto_kai = deepCopyJson(storage.esp_auto_kai or {})
       data.ingame_hotkeys = storage.ingame_hotkeys or ""
       data.bgPlayer = deepCopyJson(storage.bgPlayer or {})
+      data.esp_genjutsu_list = deepCopyJson(storage.esp_genjutsu_list or {})
+      data.esp_macro_delay = storage.esp_macro_delay or 50
+      data.visualCustom = deepCopyJson(storage.visualCustom or {})
+      data.esp_anti_burst = storage.esp_anti_burst or false
       data._originalName = charName
       local sName = charName:gsub("[^%w_%-]", "_")
       local fileName = PERFIS_DIR .. sName .. ".json"
@@ -236,9 +240,19 @@ Panel
     text: X
 
   CheckBox
-    id: showOnScreen
+    id: burstCheck
     anchors.top: parent.top
     anchors.right: removeBtn.left
+    margin-right: 5
+    margin-top: 2
+    text: Burst
+    color: #FF6666
+    text-auto-resize: true
+
+  CheckBox
+    id: showOnScreen
+    anchors.top: parent.top
+    anchors.right: burstCheck.left
     margin-right: 5
     margin-top: 2
     text: Tela
@@ -433,6 +447,15 @@ Panel
     createFugaScreenWidget(uid, fugaData, index)
   end
 
+  -- Checkbox "burst" (individual por fuga)
+  entry.burstCheck:setChecked(fugaData.burst or false)
+  entry.burstCheck:setTooltip("Marcar esta fuga para uso pelo Anti-Burst (ativa quando detectar burst)")
+  entry.burstCheck.onClick = function(w)
+    local checked = not w:isChecked()
+    w:setChecked(checked)
+    storage.esp_fugas_list[index].burst = checked
+  end
+
   entry.spellEdit.onTextChange = function(w, text)
     storage.esp_fugas_list[index].text = text
   end
@@ -615,9 +638,140 @@ end)
 
 UI.Separator(fugasContent)
 
+-- =============================================
+-- ANTI-BURST SYSTEM
+-- =============================================
+if storage.esp_anti_burst == nil then
+  storage.esp_anti_burst = false
+end
+
+local antiBurstLabel = UI.Label("Anti-Burst:", fugasContent)
+antiBurstLabel:setColor("#FF4444")
+
+local antiBurstCheckbox = UI.CheckBox("Anti-Burst (detecta burst e usa fuga marcada)", storage.esp_anti_burst, function(w)
+  storage.esp_anti_burst = not storage.esp_anti_burst
+  w:setChecked(storage.esp_anti_burst)
+end, fugasContent)
+antiBurstCheckbox:setTooltip("Se ativo, detecta quando HP cai mais de 60% em 3 segundos e usa uma fuga com 'Burst' marcado")
+
+-- Historico de HP para deteccao de burst
+local hpHistory = {}  -- { {time=ms, hp=percent}, ... }
+local lastBurstTrigger = 0  -- timestamp do ultimo trigger de burst
+
+-- Macro para rastrear HP a cada 200ms
+macro(200, function()
+  if not storage.esp_anti_burst then return end
+  local currentHp = player:getHealthPercent()
+  table.insert(hpHistory, { time = now, hp = currentHp })
+  -- Remove entradas mais antigas que 3 segundos
+  while #hpHistory > 0 and (now - hpHistory[1].time) > 3000 do
+    table.remove(hpHistory, 1)
+  end
+end)
+
+-- Funcao para verificar se esta sendo burstado
+-- Retorna true se HP caiu mais de 60 pontos percentuais nos ultimos 3 segundos
+local function isBurstDetected()
+  if #hpHistory < 2 then return false end
+  local maxHp = 0
+  for _, entry in ipairs(hpHistory) do
+    if entry.hp > maxHp then maxHp = entry.hp end
+  end
+  local currentHp = player:getHealthPercent()
+  local drop = maxHp - currentHp
+  return drop >= 60
+end
+
+UI.Separator(fugasContent)
+
 -- Main fuga macro (com suporte a quantidade e pausa de traps/combos)
 EspFugaMacro = macro(200, "Fugas Especiais", function()
   local hp = player:getHealthPercent()
+
+  -- =============================================
+  -- ANTI-BURST: verifica burst e usa fuga marcada
+  -- =============================================
+  if storage.esp_anti_burst and not fugaActive and isBurstDetected() and (now - lastBurstTrigger) > 3000 then
+    -- Busca uma fuga com burst=true que esteja fora de cooldown
+    for i, f in ipairs(storage.esp_fugas_list) do
+      if f.burst and f.text and f.text:len() > 0 then
+        local uid = f.uid
+        local cdEnd = fugaCooldownEnd[uid] or 0
+        if now >= cdEnd then
+          local cooldownMs  = (tonumber(f.cooldown) or 10) * 1000
+          local activeTimeMs = (tonumber(f.activeTime) or 3) * 1000
+          local maxUses = tonumber(f.quantidade) or 1
+          local cdQtdMs = (tonumber(f.cdQuantidade) or 2) * 1000
+
+          if not fugaUsesLeft[uid] then
+            fugaUsesLeft[uid] = maxUses
+          end
+
+          -- Pausa TODOS os macros especiais
+          local allEspMacros = {
+            { name = "trap",      ref = EspTrapMacro },
+            { name = "combo",     ref = EspComboMacro },
+            { name = "buff",      ref = EspBuffMacro },
+            { name = "ataque",    ref = EspAtaqueMacro },
+            { name = "stack",     ref = EspStackMacro },
+            { name = "retas",     ref = EspRetasMacro },
+            { name = "perseguir", ref = EspPerseguirMacro },
+            { name = "genjutsu",  ref = EspGenjutsuMacro },
+          }
+          espMacrosWereOn = {}
+          for _, m in ipairs(allEspMacros) do
+            if m.ref then
+              espMacrosWereOn[m.name] = m.ref:isOn() or false
+              if m.ref:isOn() then m.ref.setOff() end
+            end
+          end
+
+          fugaActive = true
+          lastBurstTrigger = now
+          hpHistory = {}  -- Limpa historico apos trigger
+
+          if not espCheckMacroDelay() then
+            fugaActive = false
+            return
+          end
+          say(f.text)
+          espMarkMacroUsed()
+
+          local function restaurarMacrosBurst()
+            fugaActive = false
+            local restoreMacros = {
+              { name = "trap",      ref = EspTrapMacro },
+              { name = "combo",     ref = EspComboMacro },
+              { name = "buff",      ref = EspBuffMacro },
+              { name = "ataque",    ref = EspAtaqueMacro },
+              { name = "stack",     ref = EspStackMacro },
+              { name = "retas",     ref = EspRetasMacro },
+              { name = "perseguir", ref = EspPerseguirMacro },
+              { name = "genjutsu",  ref = EspGenjutsuMacro },
+            }
+            for _, m in ipairs(restoreMacros) do
+              if m.ref and espMacrosWereOn[m.name] and not m.ref:isOn() then
+                m.ref.setOn()
+              end
+            end
+          end
+
+          fugaUsesLeft[uid] = fugaUsesLeft[uid] - 1
+          if fugaUsesLeft[uid] <= 0 then
+            fugaUsesLeft[uid] = maxUses
+            fugaActiveEnd[uid] = now + activeTimeMs
+            fugaCooldownEnd[uid] = now + activeTimeMs + cooldownMs
+            schedule(activeTimeMs, restaurarMacrosBurst)
+          else
+            fugaActiveEnd[uid] = now + activeTimeMs
+            fugaCooldownEnd[uid] = now + cdQtdMs
+            schedule(activeTimeMs, restaurarMacrosBurst)
+          end
+          return  -- Burst tratado, sair do macro
+        end
+      end
+    end
+  end
 
   -- Monta lista ordenada por campo ordem
   local fugaList = {}

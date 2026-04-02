@@ -311,6 +311,8 @@ do
     storage.ingame_hotkeys = ""
     storage.bgPlayer = {}
     storage.esp_macro_delay = 50
+    storage.esp_genjutsu_list = {}
+    storage.esp_anti_burst = false
   end
 
   -- Funcao para coletar dados do perfil atual
@@ -345,6 +347,10 @@ do
     data.esp_macro_delay = storage.esp_macro_delay or 50
     -- Visual Custom (cores)
     data.visualCustom = deepCopy(storage.visualCustom or {})
+    -- Genjutsus
+    data.esp_genjutsu_list = deepCopy(storage.esp_genjutsu_list or {})
+    -- Anti-Burst
+    data.esp_anti_burst = storage.esp_anti_burst or false
     return data
   end
 
@@ -428,6 +434,8 @@ do
     if data.esp_auto_kai then storage.esp_auto_kai = deepCopy(data.esp_auto_kai) end
     if data.ingame_hotkeys ~= nil then storage.ingame_hotkeys = data.ingame_hotkeys end
     if data.bgPlayer then storage.bgPlayer = deepCopy(data.bgPlayer) end
+    if data.esp_genjutsu_list then storage.esp_genjutsu_list = deepCopy(data.esp_genjutsu_list) end
+    if data.esp_anti_burst ~= nil then storage.esp_anti_burst = data.esp_anti_burst end
 
     -- Macro Delay
     if data.esp_macro_delay then
@@ -469,6 +477,7 @@ do
       if refreshStacks then refreshStacks() end
       if refreshRetas then refreshRetas() end
       if refreshPerseguir then refreshPerseguir() end
+      if refreshGenjutsus then refreshGenjutsus() end
     end)
 
     return true

@@ -55,8 +55,7 @@ rootWidget = g_ui.getRootWidget()
 if rootWidget then
     EspeciaisWindow = UI.createWidget('espEspeciaisWindow', rootWidget)
     EspeciaisWindow:hide()
-    EspTabBar = EspeciaisWindow.espTabBar
-    EspTabBar:setContentWidget(EspeciaisWindow.espImagem)
+    EspComboBox = EspeciaisWindow.espComboBox
    for v = 1, 1 do
 
 
@@ -87,9 +86,54 @@ espPanel8:setId("8")
 espPanel9 = g_ui.createWidget("espPanel")
 espPanel9:setId("9")
 
+-- Mapeamento de opcoes do ComboBox para paineis
+local espPanelMap = {
+  { name = "Fugas",     panel = espPanel1 },
+  { name = "Traps",     panel = espPanel2 },
+  { name = "Combos",    panel = espPanel3 },
+  { name = "Buffs",     panel = espPanel4 },
+  { name = "Ataque %",  panel = espPanel5 },
+  { name = "Stack",     panel = espPanel6 },
+  { name = "Retas",     panel = espPanel7 },
+  { name = "Perseguir", panel = espPanel8 },
+  { name = "Genjutsus", panel = espPanel9 },
+}
+
+-- Adiciona cada painel como filho de espImagem
+for _, entry in ipairs(espPanelMap) do
+  EspeciaisWindow.espImagem:addChild(entry.panel)
+  entry.panel:fill('parent')
+  entry.panel:hide()
+end
+
+-- Adiciona opcoes no ComboBox
+for _, entry in ipairs(espPanelMap) do
+  EspComboBox:addOption(entry.name)
+end
+
+-- Funcao para mostrar/esconder paineis
+local function showEspPanel(name)
+  for _, entry in ipairs(espPanelMap) do
+    if entry.name == name then
+      entry.panel:show()
+      entry.panel:raise()
+    else
+      entry.panel:hide()
+    end
+  end
+end
+
+-- Selecao inicial
+showEspPanel("Fugas")
+
+-- Callback ao trocar opcao
+EspComboBox.onOptionChange = function(widget)
+  local selected = widget:getCurrentOption().text
+  showEspPanel(selected)
+end
 
 -- Carrega todo o codigo das abas especiais de especiais.lua
--- (Fugas, Traps, Combos, Buffs, Ataque%, Stack, Retas, Perseguir)
+-- (Fugas, Traps, Combos, Buffs, Ataque%, Stack, Retas, Perseguir, Genjutsus)
 dofile("/vBot/especiais.lua")
 
 end

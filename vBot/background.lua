@@ -190,41 +190,6 @@ Panel
     font: verdana-11px-rounded
     color: white
     margin-top: 5
-
-  Panel
-    id: shadowPanel
-    anchors.top: currentBG.bottom
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 25
-    margin-top: 5
-
-    Label
-      id: shadowLabel
-      anchors.left: parent.left
-      anchors.verticalCenter: parent.verticalCenter
-      text: Sombra Tabs:
-      font: verdana-11px-rounded
-      color: white
-      width: 75
-
-    TextEdit
-      id: shadowInput
-      anchors.left: prev.right
-      anchors.verticalCenter: parent.verticalCenter
-      width: 70
-      height: 20
-      margin-left: 3
-      font: verdana-11px-rounded
-
-    Button
-      id: shadowApply
-      anchors.left: prev.right
-      anchors.verticalCenter: parent.verticalCenter
-      text: Aplicar
-      width: 50
-      height: 20
-      margin-left: 3
 ]])
 
 -- Initialize target toggles from storage
@@ -421,21 +386,6 @@ bgUI.controls.refreshBtn.onClick = function()
     refreshBGList()
     bgUI.currentBG:setText("Lista atualizada")
     bgUI.currentBG:setColor("yellow")
-end
-
--- Shadow color controls
-bgUI.shadowPanel.shadowInput:setText(storage.visualCustom and storage.visualCustom.shadowColor or "#000000")
-
-bgUI.shadowPanel.shadowApply.onClick = function()
-    local color = bgUI.shadowPanel.shadowInput:getText()
-    if color and color:len() > 0 then
-        storage.visualCustom = storage.visualCustom or {}
-        storage.visualCustom.shadowColor = color
-        -- Reaplica estilo das tabs com nova cor de sombra
-        if applyTabStyle then
-            applyTabStyle()
-        end
-    end
 end
 
 refreshBGList()

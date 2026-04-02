@@ -27,9 +27,19 @@ espEspeciaisWindow < MainWindow
   color: orange
   @onEscape: self:hide()
 
+  Button
+    id: salvarTudoBtn
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 25
+    margin-bottom: 5
+    color: #00FF88
+    !text: tr('Salvar Tudo')
+
   ComboBox
     id: espComboBox
-    anchors.top: parent.top
+    anchors.top: salvarTudoBtn.bottom
     anchors.left: parent.left
     anchors.right: parent.right
     height: 20

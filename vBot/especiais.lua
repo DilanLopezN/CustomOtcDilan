@@ -526,23 +526,6 @@ end
 -- Load existing fugas on start
 refreshFugas()
 
--- Botao OK para salvar fugas
-local okFugasBtn = setupUI([[
-Panel
-  height: 25
-  margin-top: 5
-  Button
-    id: okBtn
-    color: #00FF88
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 25
-    text: OK - Salvar Fugas
-]], fugasContent)
-okFugasBtn.okBtn.onClick = function()
-  saveEspeciaisProfile()
-end
 
 -- Macro para atualizar os widgets na tela (status visual)
 macro(200, function()
@@ -1035,23 +1018,6 @@ end
 -- Load existing traps on start
 refreshTraps()
 
--- Botao OK para salvar traps
-local okTrapsBtn = setupUI([[
-Panel
-  height: 25
-  margin-top: 5
-  Button
-    id: okBtn
-    color: #00FF88
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 25
-    text: OK - Salvar Traps
-]], trapsContent)
-okTrapsBtn.okBtn.onClick = function()
-  saveEspeciaisProfile()
-end
 
 -- Macro de traps: usa baseado em ordem, cooldown, % vida, await
 EspTrapMacro = macro(200, "Traps", function()
@@ -1278,7 +1244,6 @@ end
 
 -- ===== Containers for dynamic widgets =====
 local addJutsuBtnWidget = nil
-local okCombosBtnWidget = nil
 
 -- ===== Refresh: rebuild jutsu widgets for selected combo =====
 function refreshCombos()
@@ -1288,7 +1253,6 @@ function refreshCombos()
   comboWidgets = {}
 
   if addJutsuBtnWidget then addJutsuBtnWidget:destroy() addJutsuBtnWidget = nil end
-  if okCombosBtnWidget then okCombosBtnWidget:destroy() okCombosBtnWidget = nil end
 
   local sel = storage.esp_combo_selected
   local slot = storage.esp_combo_slots[sel]
@@ -1325,23 +1289,6 @@ Panel
     end
   end
 
-  -- Botao OK salvar
-  okCombosBtnWidget = setupUI([[
-Panel
-  height: 25
-  margin-top: 5
-  Button
-    id: okBtn
-    color: #00FF88
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 25
-    text: OK - Salvar Combos
-]], combosContent)
-  okCombosBtnWidget.okBtn.onClick = function()
-    saveEspeciaisProfile()
-  end
 end
 
 -- Load on start
@@ -1550,23 +1497,6 @@ end
 -- Load existing buffs on start
 refreshBuffs()
 
--- Botao OK para salvar buffs
-local okBuffsBtn = setupUI([[
-Panel
-  height: 25
-  margin-top: 5
-  Button
-    id: okBtn
-    color: #00FF88
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 25
-    text: OK - Salvar Buffs
-]], buffsContent)
-okBuffsBtn.okBtn.onClick = function()
-  saveEspeciaisProfile()
-end
 
 -- Macro de buffs: auto-usa quando tempo ativo acabar e nao estiver em CD
 EspBuffMacro = macro(200, "Buffs Auto", function()
@@ -1897,23 +1827,6 @@ end
 -- Load existing ataques on start
 refreshAtaques()
 
--- Botao OK para salvar ataques
-local okAtaquesBtn = setupUI([[
-Panel
-  height: 25
-  margin-top: 5
-  Button
-    id: okBtn
-    color: #00FF88
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 25
-    text: OK - Salvar Ataques
-]], ataqueContent)
-okAtaquesBtn.okBtn.onClick = function()
-  saveEspeciaisProfile()
-end
 
 
 -- =============================================
@@ -2417,23 +2330,6 @@ end
 -- Load existing stacks on start
 refreshStacks()
 
--- Botao OK para salvar stacks
-local okStacksBtn = setupUI([[
-Panel
-  height: 25
-  margin-top: 5
-  Button
-    id: okBtn
-    color: #00FF88
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 25
-    text: OK - Salvar Stacks
-]], stackContent)
-okStacksBtn.okBtn.onClick = function()
-  saveEspeciaisProfile()
-end
 
 
 -- =============================================
@@ -2944,23 +2840,6 @@ end
 -- Load existing retas on start
 refreshRetas()
 
--- Botao OK para salvar retas
-local okRetasBtn = setupUI([[
-Panel
-  height: 25
-  margin-top: 5
-  Button
-    id: okBtn
-    color: #00FF88
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 25
-    text: OK - Salvar Retas
-]], retasContent)
-okRetasBtn.okBtn.onClick = function()
-  saveEspeciaisProfile()
-end
 
 
 -- =============================================
@@ -3253,23 +3132,6 @@ end
 -- Load existing perseguir on start
 refreshPerseguir()
 
--- Botao OK para salvar perseguir
-local okPerseguirBtn = setupUI([[
-Panel
-  height: 25
-  margin-top: 5
-  Button
-    id: okBtn
-    color: #00FF88
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 25
-    text: OK - Salvar Perseguir
-]], perseguirContent)
-okPerseguirBtn.okBtn.onClick = function()
-  saveEspeciaisProfile()
-end
 
 
 -- =============================================
@@ -3674,21 +3536,4 @@ end
 -- Load existing genjutsus on start
 refreshGenjutsus()
 
--- Botao OK para salvar genjutsus
-local okGenjutsuBtn = setupUI([[
-Panel
-  height: 25
-  margin-top: 5
-  Button
-    id: okBtn
-    color: #00FF88
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 25
-    text: OK - Salvar Genjutsus
-]], genjutsuContent)
-okGenjutsuBtn.okBtn.onClick = function()
-  saveEspeciaisProfile()
-end
 

@@ -6,7 +6,10 @@ local BG_PATH = "/bot/" .. ConfigName .. "/img/"
 storage.bgPlayer = storage.bgPlayer or {
     currentBG = nil,
     opacity = "99",
-    bgColor = "#000000"
+    bgColor = "#000000",
+    applyWindow = true,
+    applyPanel = true,
+    applyContents = true
 }
 
 local selectedBG = nil
@@ -273,14 +276,14 @@ function applyBG(file)
     local imageColor = "#FFFFFF" .. opacityHex
 
     -- Apply to botWindow (full window)
-    if storage.bgPlayer.applyWindow then
+    if storage.bgPlayer.applyWindow ~= false then
         modules.game_bot.botWindow:setImageSource(path)
         modules.game_bot.botWindow:setImageColor(imageColor)
         modules.game_bot.botWindow:setBackgroundColor(storage.bgPlayer.bgColor or "#000000")
     end
 
     -- Apply to botPanel (inner content panel)
-    if storage.bgPlayer.applyPanel then
+    if storage.bgPlayer.applyPanel ~= false then
         local botPanel = modules.game_bot.contentsPanel.botPanel
         if botPanel then
             botPanel:setImageSource(path)
@@ -289,7 +292,7 @@ function applyBG(file)
     end
 
     -- Apply to contentsPanel (original behavior)
-    if storage.bgPlayer.applyContents then
+    if storage.bgPlayer.applyContents ~= false then
         modules.game_bot.botWindow.contentsPanel:setImageSource(path)
         modules.game_bot.botWindow.contentsPanel:setImageColor(imageColor)
     end
@@ -389,6 +392,39 @@ bgUI.controls.refreshBtn.onClick = function()
 end
 
 refreshBGList()
+
+-- Global function to sync BG UI with storage (called after profile load)
+function refreshBGUI()
+    -- Sync toggle switches
+    storage.bgPlayer.applyWindow = storage.bgPlayer.applyWindow ~= false
+    storage.bgPlayer.applyPanel = storage.bgPlayer.applyPanel ~= false
+    storage.bgPlayer.applyContents = storage.bgPlayer.applyContents ~= false
+    bgUI.targetPanel.applyWindow:setOn(storage.bgPlayer.applyWindow)
+    bgUI.targetPanel.applyPanel:setOn(storage.bgPlayer.applyPanel)
+    bgUI.targetPanel.applyContents:setOn(storage.bgPlayer.applyContents)
+
+    -- Sync opacity index and label
+    currentOpacityIdx = 3
+    for i, preset in ipairs(opacityPresets) do
+        if preset.value == (storage.bgPlayer.opacity or "99") then
+            currentOpacityIdx = i
+            break
+        end
+    end
+    bgUI.opacityPanel.opValue:setText(opacityPresets[currentOpacityIdx].label)
+
+    -- Sync current BG label
+    if storage.bgPlayer.currentBG then
+        bgUI.currentBG:setText("Atual: " .. storage.bgPlayer.currentBG)
+        bgUI.currentBG:setColor("#00ff00")
+    else
+        bgUI.currentBG:setText("--")
+        bgUI.currentBG:setColor("white")
+    end
+
+    -- Refresh file list
+    refreshBGList()
+end
 
 -- Auto-apply saved BG on load
 if storage.bgPlayer.currentBG then

@@ -309,7 +309,14 @@ do
     storage.esp_perseguir_list = {}
     storage.esp_auto_kai = {}
     storage.ingame_hotkeys = ""
-    storage.bgPlayer = {}
+    storage.bgPlayer = {
+      currentBG = nil,
+      opacity = "99",
+      bgColor = "#000000",
+      applyWindow = true,
+      applyPanel = true,
+      applyContents = true
+    }
     storage.esp_macro_delay = 50
     storage.esp_genjutsu_list = {}
     storage.esp_anti_burst = false
@@ -460,12 +467,15 @@ do
 
     storage.perfis_current = data._originalName or charName
 
-    -- Aplicar background se salvo
-    if storage.bgPlayer and storage.bgPlayer.currentBG then
-      schedule(300, function()
+    -- Aplicar background se salvo, ou limpar se perfil nao tem BG
+    schedule(300, function()
+      if storage.bgPlayer and storage.bgPlayer.currentBG then
         if applyBG then applyBG(storage.bgPlayer.currentBG) end
-      end)
-    end
+      else
+        if clearBG then clearBG() end
+      end
+      if refreshBGUI then refreshBGUI() end
+    end)
 
     -- Recarregar UI das fugas/combos/buffs/traps/ataques
     schedule(200, function()
@@ -862,6 +872,8 @@ MainWindow
               if refreshStacks then refreshStacks() end
               if refreshRetas then refreshRetas() end
               if refreshPerseguir then refreshPerseguir() end
+              if clearBG then clearBG() end
+              if refreshBGUI then refreshBGUI() end
             end)
           end
         end

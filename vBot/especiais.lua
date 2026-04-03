@@ -3859,21 +3859,23 @@ refreshGenjutsus()
 -- =============================================
 -- CLEANUP: destruir todos os widgets de tela ao sair do jogo
 -- =============================================
-onGameEnd(function()
-  -- Destruir widgets de fuga na tela
-  for uid, sw in pairs(fugaScreenWidgets) do
-    if sw and sw.destroy then
-      pcall(function() sw:destroy() end)
+if onGameEnd then
+  onGameEnd(function()
+    -- Destruir widgets de fuga na tela
+    for uid, sw in pairs(fugaScreenWidgets) do
+      if sw and sw.destroy then
+        pcall(function() sw:destroy() end)
+      end
     end
-  end
-  fugaScreenWidgets = {}
+    fugaScreenWidgets = {}
 
-  -- Destruir widgets de status na tela (ataque, stack, retas, perseguir, genjutsu)
-  local screenWidgets = {espAtkWidget, espStackWidget, espRetasWidget, espPerseguirWidget, espGenjutsuWidget}
-  for _, w in ipairs(screenWidgets) do
-    if w and w.destroy then
-      pcall(function() w:destroy() end)
+    -- Destruir widgets de status na tela (ataque, stack, retas, perseguir, genjutsu)
+    local screenWidgets = {espAtkWidget, espStackWidget, espRetasWidget, espPerseguirWidget, espGenjutsuWidget}
+    for _, w in ipairs(screenWidgets) do
+      if w and w.destroy then
+        pcall(function() w:destroy() end)
+      end
     end
-  end
-end)
+  end)
+end
 

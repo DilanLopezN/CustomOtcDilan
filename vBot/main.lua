@@ -279,19 +279,30 @@ do
     return t
   end
 
-  -- Converte chaves string numericas para chaves numericas (fix JSON decode)
+  -- Converte chaves string numericas para chaves numericas (fix JSON decode) - recursivo
   local function fixNumericKeys(t)
     if type(t) ~= "table" then return t end
     local fixed = {}
     for k, v in pairs(t) do
       local numKey = tonumber(k)
+      local fixedValue = type(v) == "table" and fixNumericKeys(v) or v
       if numKey then
-        fixed[numKey] = v
+        fixed[numKey] = fixedValue
       else
-        fixed[k] = v
+        fixed[k] = fixedValue
       end
     end
     return fixed
+  end
+
+  -- Converter chaves numericas para string antes de salvar (evitar problemas JSON com chave 0)
+  local function toStringKeys(t)
+    if type(t) ~= "table" then return t end
+    local result = {}
+    for k, v in pairs(t) do
+      result[tostring(k)] = type(v) == "table" and deepCopy(v) or v
+    end
+    return result
   end
 
   -- Funcao para limpar storage do perfil (para perfis novos)
@@ -320,8 +331,8 @@ do
     local data = {}
     -- Fugas
     data.esp_fugas_list = deepCopy(storage.esp_fugas_list or {})
-    data.esp_fugas_widgets_show = deepCopy(storage.esp_fugas_widgets_show or {})
-    data.esp_fugas_widgets_pos = deepCopy(storage.esp_fugas_widgets_pos or {})
+    data.esp_fugas_widgets_show = toStringKeys(storage.esp_fugas_widgets_show or {})
+    data.esp_fugas_widgets_pos = toStringKeys(storage.esp_fugas_widgets_pos or {})
     -- Traps
     data.esp_trap_list = deepCopy(storage.esp_trap_list or {})
     -- Combos (5 slots)
@@ -394,7 +405,7 @@ do
     if not status or not data then return false end
 
     -- Aplicar dados do perfil (deep copy + fix chaves numericas)
-    if data.esp_fugas_list then storage.esp_fugas_list = deepCopy(data.esp_fugas_list) end
+    if data.esp_fugas_list then storage.esp_fugas_list = fixNumericKeys(deepCopy(data.esp_fugas_list)) end
     if data.esp_fugas_widgets_show then storage.esp_fugas_widgets_show = fixNumericKeys(deepCopy(data.esp_fugas_widgets_show)) end
     if data.esp_fugas_widgets_pos then storage.esp_fugas_widgets_pos = fixNumericKeys(deepCopy(data.esp_fugas_widgets_pos)) end
     if data.esp_trap_list then storage.esp_trap_list = deepCopy(data.esp_trap_list)
@@ -411,7 +422,7 @@ do
       end
     end
     if data.esp_combo_slots then
-      storage.esp_combo_slots = deepCopy(data.esp_combo_slots)
+      storage.esp_combo_slots = fixNumericKeys(deepCopy(data.esp_combo_slots))
       storage.esp_combo_selected = data.esp_combo_selected or 1
     elseif data.esp_combo_list then
       -- Migrar formato antigo: lista unica -> slot 1
@@ -426,15 +437,15 @@ do
       end
       storage.esp_combo_selected = 1
     end
-    if data.esp_buffs_list then storage.esp_buffs_list = deepCopy(data.esp_buffs_list) end
-    if data.esp_ataque_list then storage.esp_ataque_list = deepCopy(data.esp_ataque_list) end
-    if data.esp_stack_list then storage.esp_stack_list = deepCopy(data.esp_stack_list) end
-    if data.esp_retas_list then storage.esp_retas_list = deepCopy(data.esp_retas_list) end
-    if data.esp_perseguir_list then storage.esp_perseguir_list = deepCopy(data.esp_perseguir_list) end
-    if data.esp_auto_kai then storage.esp_auto_kai = deepCopy(data.esp_auto_kai) end
+    if data.esp_buffs_list then storage.esp_buffs_list = fixNumericKeys(deepCopy(data.esp_buffs_list)) end
+    if data.esp_ataque_list then storage.esp_ataque_list = fixNumericKeys(deepCopy(data.esp_ataque_list)) end
+    if data.esp_stack_list then storage.esp_stack_list = fixNumericKeys(deepCopy(data.esp_stack_list)) end
+    if data.esp_retas_list then storage.esp_retas_list = fixNumericKeys(deepCopy(data.esp_retas_list)) end
+    if data.esp_perseguir_list then storage.esp_perseguir_list = fixNumericKeys(deepCopy(data.esp_perseguir_list)) end
+    if data.esp_auto_kai then storage.esp_auto_kai = fixNumericKeys(deepCopy(data.esp_auto_kai)) end
     if data.ingame_hotkeys ~= nil then storage.ingame_hotkeys = data.ingame_hotkeys end
     if data.bgPlayer then storage.bgPlayer = deepCopy(data.bgPlayer) end
-    if data.esp_genjutsu_list then storage.esp_genjutsu_list = deepCopy(data.esp_genjutsu_list) end
+    if data.esp_genjutsu_list then storage.esp_genjutsu_list = fixNumericKeys(deepCopy(data.esp_genjutsu_list)) end
     if data.esp_anti_burst ~= nil then storage.esp_anti_burst = data.esp_anti_burst end
 
     -- Macro Delay

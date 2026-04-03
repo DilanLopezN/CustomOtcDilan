@@ -86,6 +86,7 @@ if type(storage.esp_fugas_widgets_show) ~= "table" then
   storage.esp_fugas_widgets_show = {}
 end
 
+local fugaRefreshing = false
 local fugaActive = false
 local fugaCooldownEnd = {}   -- [uid] = timestamp quando CD termina
 local fugaActiveEnd = {}     -- [uid] = timestamp quando ativo termina
@@ -457,24 +458,31 @@ Panel
   end
 
   entry.spellEdit.onTextChange = function(w, text)
+    if fugaRefreshing then return end
     storage.esp_fugas_list[index].text = text
   end
   entry.row1.hpEdit.onTextChange = function(w, text)
+    if fugaRefreshing then return end
     storage.esp_fugas_list[index].hp = tonumber(text) or 50
   end
   entry.row2.activeEdit.onTextChange = function(w, text)
+    if fugaRefreshing then return end
     storage.esp_fugas_list[index].activeTime = tonumber(text) or 3
   end
   entry.row3.cdEdit.onTextChange = function(w, text)
+    if fugaRefreshing then return end
     storage.esp_fugas_list[index].cooldown = tonumber(text) or 10
   end
   entry.row4.orderEdit.onTextChange = function(w, text)
+    if fugaRefreshing then return end
     storage.esp_fugas_list[index].order = tonumber(text) or index
   end
   entry.row5.qtdEdit.onTextChange = function(w, text)
+    if fugaRefreshing then return end
     storage.esp_fugas_list[index].quantidade = tonumber(text) or 1
   end
   entry.row6.cdQtdEdit.onTextChange = function(w, text)
+    if fugaRefreshing then return end
     storage.esp_fugas_list[index].cdQuantidade = tonumber(text) or 2
   end
 
@@ -501,6 +509,7 @@ end
 
 -- Refresh all fuga widgets
 function refreshFugas()
+  fugaRefreshing = true
   for _, w in ipairs(fugaWidgets) do
     w:destroy()
   end
@@ -526,6 +535,7 @@ function refreshFugas()
   for i, fugaData in ipairs(storage.esp_fugas_list) do
     createFugaWidget(i, fugaData)
   end
+  fugaRefreshing = false
 end
 
 -- Add button click
@@ -645,14 +655,24 @@ if storage.esp_anti_burst == nil then
   storage.esp_anti_burst = false
 end
 
-local antiBurstLabel = UI.Label("Anti-Burst:", fugasContent)
-antiBurstLabel:setColor("#FF4444")
+local antiBurstPanel = setupUI([[
+Panel
+  height: 24
+  CheckBox
+    id: antiBurstCheck
+    anchors.left: parent.left
+    anchors.verticalCenter: parent.verticalCenter
+    text: Anti-Burst (detecta burst e usa fuga marcada)
+    color: #FF4444
+    text-auto-resize: true
+]], fugasContent)
 
-local antiBurstCheckbox = UI.CheckBox("Anti-Burst (detecta burst e usa fuga marcada)", storage.esp_anti_burst, function(w)
+antiBurstPanel.antiBurstCheck:setChecked(storage.esp_anti_burst or false)
+antiBurstPanel.antiBurstCheck:setTooltip("Se ativo, detecta quando HP cai mais de 60% em 3 segundos e usa uma fuga com 'Burst' marcado")
+antiBurstPanel.antiBurstCheck.onClick = function(w)
   storage.esp_anti_burst = not storage.esp_anti_burst
   w:setChecked(storage.esp_anti_burst)
-end, fugasContent)
-antiBurstCheckbox:setTooltip("Se ativo, detecta quando HP cai mais de 60% em 3 segundos e usa uma fuga com 'Burst' marcado")
+end
 
 -- Historico de HP para deteccao de burst
 local hpHistory = {}  -- { {time=ms, hp=percent}, ... }
@@ -946,6 +966,7 @@ for _, t in ipairs(storage.esp_trap_list) do
   end
 end
 
+local trapRefreshing = false
 local trapCooldownEnd = {}   -- [uid] = timestamp quando CD termina
 local trapActiveEnd = {}     -- [uid] = timestamp quando trap ativa termina (tempo trapado)
 local trapWidgets = {}
@@ -1104,15 +1125,19 @@ Panel
   end
 
   entry.spellEdit.onTextChange = function(w, text)
+    if trapRefreshing then return end
     storage.esp_trap_list[index].text = text
   end
   entry.row1.cdEdit.onTextChange = function(w, text)
+    if trapRefreshing then return end
     storage.esp_trap_list[index].cooldown = tonumber(text) or 5
   end
   entry.row2.trapTimeEdit.onTextChange = function(w, text)
+    if trapRefreshing then return end
     storage.esp_trap_list[index].trapTime = tonumber(text) or 3
   end
   entry.row3.hpEdit.onTextChange = function(w, text)
+    if trapRefreshing then return end
     storage.esp_trap_list[index].hpPercent = tonumber(text) or 100
   end
   entry.row4.awaitCheck.onClick = function(w)
@@ -1154,6 +1179,7 @@ end
 
 -- Refresh all trap widgets
 function refreshTraps()
+  trapRefreshing = true
   for _, w in ipairs(trapWidgets) do
     w:destroy()
   end
@@ -1161,6 +1187,7 @@ function refreshTraps()
   for i, trapData in ipairs(storage.esp_trap_list) do
     createTrapWidget(i, trapData)
   end
+  trapRefreshing = false
 end
 
 -- Botao adicionar trap
@@ -1280,6 +1307,7 @@ if type(storage.esp_combo_selected) ~= "number" or storage.esp_combo_selected < 
   storage.esp_combo_selected = 1
 end
 
+local comboRefreshing = false
 local comboWidgets = {}
 
 -- ===== Header: "Selecionar Combo" com ComboBox dropdown =====
@@ -1401,6 +1429,7 @@ Panel
   entry.spellEdit:setColor("#00DDFF")
 
   entry.spellEdit.onTextChange = function(w, text)
+    if comboRefreshing then return end
     local slot = storage.esp_combo_slots[slotIndex]
     if slot and slot.jutsus[jutsuIndex] then
       slot.jutsus[jutsuIndex].text = text
@@ -1424,6 +1453,7 @@ local addJutsuBtnWidget = nil
 
 -- ===== Refresh: rebuild jutsu widgets for selected combo =====
 function refreshCombos()
+  comboRefreshing = true
   for _, w in ipairs(comboWidgets) do
     w:destroy()
   end
@@ -1433,7 +1463,7 @@ function refreshCombos()
 
   local sel = storage.esp_combo_selected
   local slot = storage.esp_combo_slots[sel]
-  if not slot then return end
+  if not slot then comboRefreshing = false return end
 
   comboNamePanel.nameEdit:setText(slot.name or ("Combo " .. sel))
   updateComboSelect()
@@ -1466,6 +1496,7 @@ Panel
     end
   end
 
+  comboRefreshing = false
 end
 
 -- Load on start
@@ -1512,6 +1543,7 @@ for _, b in ipairs(storage.esp_buffs_list) do
   end
 end
 
+local buffRefreshing = false
 local buffCooldownEnd = {}   -- [uid] = timestamp quando CD termina
 local buffActiveEnd = {}     -- [uid] = timestamp quando ativo termina
 local buffWidgets = {}
@@ -1613,12 +1645,15 @@ Panel
   end
 
   entry.spellEdit.onTextChange = function(w, text)
+    if buffRefreshing then return end
     storage.esp_buffs_list[index].text = text
   end
   entry.row1.activeEdit.onTextChange = function(w, text)
+    if buffRefreshing then return end
     storage.esp_buffs_list[index].activeTime = tonumber(text) or 10
   end
   entry.row2.cdEdit.onTextChange = function(w, text)
+    if buffRefreshing then return end
     storage.esp_buffs_list[index].cooldown = tonumber(text) or 30
   end
 
@@ -1635,6 +1670,7 @@ end
 
 -- Refresh all buff widgets
 function refreshBuffs()
+  buffRefreshing = true
   for _, w in ipairs(buffWidgets) do
     w:destroy()
   end
@@ -1642,6 +1678,7 @@ function refreshBuffs()
   for i, buffData in ipairs(storage.esp_buffs_list) do
     createBuffWidget(i, buffData)
   end
+  buffRefreshing = false
 end
 
 -- Botao adicionar buff
@@ -1727,6 +1764,7 @@ for _, a in ipairs(storage.esp_ataque_list) do
   end
 end
 
+local ataqueRefreshing = false
 local ataqueCooldownEnd = {}  -- [uid] = timestamp quando CD termina
 local ataqueWidgets = {}
 
@@ -1940,15 +1978,19 @@ Panel
   end
 
   entry.spellEdit.onTextChange = function(w, text)
+    if ataqueRefreshing then return end
     storage.esp_ataque_list[index].spell = text
   end
   entry.row1.nameEdit.onTextChange = function(w, text)
+    if ataqueRefreshing then return end
     storage.esp_ataque_list[index].name = text
   end
   entry.row2.hpEdit.onTextChange = function(w, text)
+    if ataqueRefreshing then return end
     storage.esp_ataque_list[index].hp = tonumber(text) or 90
   end
   entry.row3.cdEdit.onTextChange = function(w, text)
+    if ataqueRefreshing then return end
     storage.esp_ataque_list[index].cd = tonumber(text) or 2
   end
 
@@ -1964,6 +2006,7 @@ end
 
 -- Refresh all ataque widgets
 function refreshAtaques()
+  ataqueRefreshing = true
   for _, w in ipairs(ataqueWidgets) do
     w:destroy()
   end
@@ -1971,6 +2014,7 @@ function refreshAtaques()
   for i, ataqueData in ipairs(storage.esp_ataque_list) do
     createAtaqueWidget(i, ataqueData)
   end
+  ataqueRefreshing = false
 end
 
 -- Botao adicionar ataque
@@ -2032,6 +2076,7 @@ for _, s in ipairs(storage.esp_stack_list) do
   end
 end
 
+local stackRefreshing = false
 local stackCooldownEnd = {}  -- [uid] = timestamp quando CD termina
 local stackWidgets = {}
 
@@ -2439,18 +2484,23 @@ Panel
   end
 
   entry.spellEdit.onTextChange = function(w, text)
+    if stackRefreshing then return end
     storage.esp_stack_list[index].spell = text
   end
   entry.row1.nameEdit.onTextChange = function(w, text)
+    if stackRefreshing then return end
     storage.esp_stack_list[index].name = text
   end
   entry.row2.keyCombo.onOptionChange = function(w, text)
+    if stackRefreshing then return end
     storage.esp_stack_list[index].key = text
   end
   entry.row3.distEdit.onTextChange = function(w, text)
+    if stackRefreshing then return end
     storage.esp_stack_list[index].distance = tonumber(text) or 5
   end
   entry.row4.cdEdit.onTextChange = function(w, text)
+    if stackRefreshing then return end
     storage.esp_stack_list[index].cd = tonumber(text) or 2
   end
 
@@ -2466,6 +2516,7 @@ end
 
 -- Refresh all stack widgets
 function refreshStacks()
+  stackRefreshing = true
   for _, w in ipairs(stackWidgets) do
     w:destroy()
   end
@@ -2473,6 +2524,7 @@ function refreshStacks()
   for i, stackData in ipairs(storage.esp_stack_list) do
     createStackWidget(i, stackData)
   end
+  stackRefreshing = false
 end
 
 -- Botao adicionar stack
@@ -2533,6 +2585,7 @@ for _, r in ipairs(storage.esp_retas_list) do
   end
 end
 
+local retasRefreshing = false
 local retasCooldownEnd = {}  -- [uid] = timestamp quando CD termina
 local retasDelayEnd = 0      -- delay global para autowalk
 local retasWidgets = {}
@@ -2942,21 +2995,27 @@ Panel
   end
 
   entry.spellEdit.onTextChange = function(w, text)
+    if retasRefreshing then return end
     storage.esp_retas_list[index].spell = text
   end
   entry.row1.nameEdit.onTextChange = function(w, text)
+    if retasRefreshing then return end
     storage.esp_retas_list[index].name = text
   end
   entry.row2.keyCombo.onOptionChange = function(w, text)
+    if retasRefreshing then return end
     storage.esp_retas_list[index].key = text
   end
   entry.row3.distEdit.onTextChange = function(w, text)
+    if retasRefreshing then return end
     storage.esp_retas_list[index].distance = tonumber(text) or 4
   end
   entry.row4.cdEdit.onTextChange = function(w, text)
+    if retasRefreshing then return end
     storage.esp_retas_list[index].cd = tonumber(text) or 2
   end
   entry.row5.hpEdit.onTextChange = function(w, text)
+    if retasRefreshing then return end
     local val = tonumber(text) or 100
     if val < 1 then val = 1 end
     if val > 100 then val = 100 end
@@ -2975,6 +3034,7 @@ end
 
 -- Refresh all retas widgets
 function refreshRetas()
+  retasRefreshing = true
   for _, w in ipairs(retasWidgets) do
     w:destroy()
   end
@@ -2982,6 +3042,7 @@ function refreshRetas()
   for i, retaData in ipairs(storage.esp_retas_list) do
     createRetaWidget(i, retaData)
   end
+  retasRefreshing = false
 end
 
 -- Botao adicionar reta
@@ -3045,6 +3106,7 @@ for _, p in ipairs(storage.esp_perseguir_list) do
   end
 end
 
+local perseguirRefreshing = false
 local perseguirCooldownEnd = {}  -- [uid] = timestamp quando CD termina
 local perseguirWidgets = {}
 
@@ -3249,12 +3311,15 @@ Panel
   end
 
   entry.spellEdit.onTextChange = function(w, text)
+    if perseguirRefreshing then return end
     storage.esp_perseguir_list[index].spell = text
   end
   entry.row1.nameEdit.onTextChange = function(w, text)
+    if perseguirRefreshing then return end
     storage.esp_perseguir_list[index].name = text
   end
   entry.row2.cdEdit.onTextChange = function(w, text)
+    if perseguirRefreshing then return end
     storage.esp_perseguir_list[index].cd = tonumber(text) or 2
   end
 
@@ -3270,6 +3335,7 @@ end
 
 -- Refresh all perseguir widgets
 function refreshPerseguir()
+  perseguirRefreshing = true
   for _, w in ipairs(perseguirWidgets) do
     w:destroy()
   end
@@ -3277,6 +3343,7 @@ function refreshPerseguir()
   for i, perData in ipairs(storage.esp_perseguir_list) do
     createPerseguirWidget(i, perData)
   end
+  perseguirRefreshing = false
 end
 
 -- Botao adicionar perseguir
@@ -3337,6 +3404,7 @@ for _, g in ipairs(storage.esp_genjutsu_list) do
   end
 end
 
+local genjutsuRefreshing = false
 local genjutsuCooldownEnd = {}  -- [uid] = timestamp quando CD termina
 local genjutsuWidgets = {}
 
@@ -3642,19 +3710,24 @@ Panel
   end
 
   entry.spellEdit.onTextChange = function(w, text)
+    if genjutsuRefreshing then return end
     storage.esp_genjutsu_list[index].spell = text
   end
   entry.row1.nameEdit.onTextChange = function(w, text)
+    if genjutsuRefreshing then return end
     storage.esp_genjutsu_list[index].name = text
   end
   entry.row2.hpEdit.onTextChange = function(w, text)
+    if genjutsuRefreshing then return end
     storage.esp_genjutsu_list[index].hp = tonumber(text) or 50
   end
   entry.row3.cdEdit.onTextChange = function(w, text)
+    if genjutsuRefreshing then return end
     storage.esp_genjutsu_list[index].cd = tonumber(text) or 5
   end
 
   entry.rowTipo.tipoCombo.onOptionChange = function(w, text)
+    if genjutsuRefreshing then return end
     local selectedTipo = (text == "Ofensivo") and "ofensivo" or "defensivo"
     storage.esp_genjutsu_list[index].tipo = selectedTipo
     updateHpInfo(selectedTipo)
@@ -3672,6 +3745,7 @@ end
 
 -- Refresh all genjutsu widgets
 function refreshGenjutsus()
+  genjutsuRefreshing = true
   for _, w in ipairs(genjutsuWidgets) do
     w:destroy()
   end
@@ -3679,6 +3753,7 @@ function refreshGenjutsus()
   for i, genData in ipairs(storage.esp_genjutsu_list) do
     createGenjutsuWidget(i, genData)
   end
+  genjutsuRefreshing = false
 end
 
 -- Botao adicionar genjutsu

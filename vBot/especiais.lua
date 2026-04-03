@@ -18,10 +18,19 @@ function saveEspeciaisProfile()
         end
         return t
       end
+      -- Converter chaves numericas para string antes de salvar (evitar problemas JSON com chave 0)
+      local function toStringKeys(t)
+        if type(t) ~= "table" then return t end
+        local result = {}
+        for k, v in pairs(t) do
+          result[tostring(k)] = type(v) == "table" and deepCopyJson(v) or v
+        end
+        return result
+      end
       local data = {}
       data.esp_fugas_list = deepCopyJson(storage.esp_fugas_list or {})
-      data.esp_fugas_widgets_show = deepCopyJson(storage.esp_fugas_widgets_show or {})
-      data.esp_fugas_widgets_pos = deepCopyJson(storage.esp_fugas_widgets_pos or {})
+      data.esp_fugas_widgets_show = toStringKeys(storage.esp_fugas_widgets_show or {})
+      data.esp_fugas_widgets_pos = toStringKeys(storage.esp_fugas_widgets_pos or {})
       data.esp_trap_list = deepCopyJson(storage.esp_trap_list or {})
       data.esp_combo_slots = deepCopyJson(storage.esp_combo_slots or {})
       data.esp_combo_selected = storage.esp_combo_selected or 1
@@ -58,6 +67,12 @@ end
 -- TAB: FUGAS (dinamico)
 -- =============================================
 local fugasContent = espPanel1.scrollArea
+
+-- Macro placeholder (BotSwitch aparece no topo da aba)
+local _fugaMacroCallback = nil
+EspFugaMacro = macro(200, "Fugas Especiais", function()
+  if _fugaMacroCallback then _fugaMacroCallback() end
+end, fugasContent)
 
 -- Storage: lista de fugas
 if type(storage.esp_fugas_list) ~= "table" then
@@ -164,7 +179,7 @@ UIWidget
 ]], g_ui.getRootWidget())
 
   -- Posicao salva ou padrao
-  local savedPos = storage.esp_fugas_widgets_pos[uid]
+  local savedPos = storage.esp_fugas_widgets_pos[uid] or storage.esp_fugas_widgets_pos[tostring(uid)]
   if savedPos and savedPos.x and savedPos.y then
     screenWidget:breakAnchors()
     screenWidget:move(savedPos.x, savedPos.y)
@@ -190,7 +205,7 @@ UIWidget
     return true
   end
 
-  local spellName = fugaData.text or ("Fuga #" .. displayIndex)
+  local spellName = (fugaData.text and fugaData.text:len() > 0) and fugaData.text or ("Fuga #" .. (uid + 1))
   screenWidget.statusText:setText(spellName .. " | OK")
 
   -- Sempre visivel quando criado (so e criado se checkbox ativo)
@@ -399,7 +414,8 @@ Panel
 
   ]], fugasContent)
 
-  entry.title:setText("Fuga #" .. index)
+  local displayName = (fugaData.text and fugaData.text:len() > 0) and fugaData.text or ("Fuga #" .. (uid + 1))
+  entry.title:setText(displayName)
   entry.spellEdit:setText(fugaData.text or "")
   entry.row1.hpEdit:setText(tostring(fugaData.hp or 50))
   entry.row2.activeEdit:setText(tostring(fugaData.activeTime or 3))
@@ -425,7 +441,7 @@ Panel
   end
 
   -- Checkbox "mostrar na tela"
-  entry.showOnScreen:setChecked(storage.esp_fugas_widgets_show[uid] or false)
+  entry.showOnScreen:setChecked(storage.esp_fugas_widgets_show[uid] or storage.esp_fugas_widgets_show[tostring(uid)] or false)
   entry.showOnScreen.onClick = function(w)
     local checked = not w:isChecked()
     w:setChecked(checked)
@@ -444,7 +460,7 @@ Panel
   end
 
   -- Criar widget na tela somente se checkbox ativo (evita duplicacao no restart)
-  if storage.esp_fugas_widgets_show[uid] then
+  if storage.esp_fugas_widgets_show[uid] or storage.esp_fugas_widgets_show[tostring(uid)] then
     createFugaScreenWidget(uid, fugaData, index)
   end
 
@@ -460,6 +476,9 @@ Panel
   entry.spellEdit.onTextChange = function(w, text)
     if fugaRefreshing then return end
     storage.esp_fugas_list[index].text = text
+    -- Atualizar titulo dinamicamente
+    local newName = (text and text:len() > 0) and text or ("Fuga #" .. (uid + 1))
+    entry.title:setText(newName)
   end
   entry.row1.hpEdit.onTextChange = function(w, text)
     if fugaRefreshing then return end
@@ -575,7 +594,7 @@ macro(200, function()
     end
 
     if sw and fugaData then
-      local spellName = fugaData.text or ("Fuga #" .. (fugaIndex or "?"))
+      local spellName = (fugaData.text and fugaData.text:len() > 0) and fugaData.text or ("Fuga #" .. (uid + 1))
       local activeEnd = fugaActiveEnd[uid] or 0
       local cdEnd = fugaCooldownEnd[uid] or 0
       local qtd = tonumber(fugaData.quantidade) or 1
@@ -704,8 +723,8 @@ end
 
 UI.Separator(fugasContent)
 
--- Main fuga macro (com suporte a quantidade e pausa de traps/combos)
-EspFugaMacro = macro(200, "Fugas Especiais", function()
+-- Main fuga macro callback (BotSwitch criado no topo da aba)
+_fugaMacroCallback = function()
   local hp = player:getHealthPercent()
 
   -- =============================================
@@ -921,7 +940,7 @@ EspFugaMacro = macro(200, "Fugas Especiais", function()
       break
     end
   end
-end, fugasContent)
+end
 
 
 
@@ -929,6 +948,12 @@ end, fugasContent)
 -- TAB: TRAPS (dinamico - adicionar/remover/ordenar)
 -- =============================================
 local trapsContent = espPanel2.scrollArea
+
+-- Macro placeholder (BotSwitch aparece no topo da aba)
+local _trapMacroCallback = nil
+EspTrapMacro = macro(200, "Traps", function()
+  if _trapMacroCallback then _trapMacroCallback() end
+end, trapsContent)
 
 -- Storage: lista de traps (formato novo)
 if type(storage.esp_trap_list) ~= "table" then
@@ -1223,8 +1248,8 @@ end
 refreshTraps()
 
 
--- Macro de traps: usa baseado em ordem, cooldown, % vida, await
-EspTrapMacro = macro(200, "Traps", function()
+-- Macro de traps callback (BotSwitch criado no topo da aba)
+_trapMacroCallback = function()
   if not g_game.isAttacking() then return end
 
   local target = g_game.getAttackingCreature()
@@ -1272,13 +1297,19 @@ EspTrapMacro = macro(200, "Traps", function()
       end
     end
   end
-end, trapsContent)
+end
 
 
 -- =============================================
 -- TAB: COMBOS (5 slots, cada combo = lista de jutsus)
 -- =============================================
 local combosContent = espPanel3.scrollArea
+
+-- Macro placeholder (BotSwitch aparece no topo da aba)
+local _comboMacroCallback = nil
+EspComboMacro = macro(100, "Combo Especial", function()
+  if _comboMacroCallback then _comboMacroCallback() end
+end, combosContent)
 
 -- ===== Storage: 5 combo slots =====
 if type(storage.esp_combo_slots) ~= "table" then
@@ -1503,8 +1534,8 @@ end
 updateComboSelect()
 refreshCombos()
 
--- ===== Macro: executa TODOS os jutsus do combo na sequencia e recomeça =====
-EspComboMacro = macro(100, "Combo Especial", function()
+-- ===== Macro callback: executa TODOS os jutsus do combo na sequencia e recomeça =====
+_comboMacroCallback = function()
   if not g_game.isAttacking() then return end
   if not espCheckMacroDelay() then return end
   local sel = storage.esp_combo_selected
@@ -1517,12 +1548,18 @@ EspComboMacro = macro(100, "Combo Especial", function()
     end
   end
   espMarkMacroUsed()
-end, combosContent)
+end
 
 -- =============================================
 -- TAB: BUFFS (dinamico - adicionar/remover)
 -- =============================================
 local buffsContent = espPanel4.scrollArea
+
+-- Macro placeholder (BotSwitch aparece no topo da aba)
+local _buffMacroCallback = nil
+EspBuffMacro = macro(200, "Buffs Auto", function()
+  if _buffMacroCallback then _buffMacroCallback() end
+end, buffsContent)
 
 -- Storage: lista de buffs
 if type(storage.esp_buffs_list) ~= "table" then
@@ -1712,8 +1749,8 @@ end
 refreshBuffs()
 
 
--- Macro de buffs: auto-usa quando tempo ativo acabar e nao estiver em CD
-EspBuffMacro = macro(200, "Buffs Auto", function()
+-- Macro de buffs callback (BotSwitch criado no topo da aba)
+_buffMacroCallback = function()
   if isInPz() then return end
   -- Nao usa buffs durante fuga ativa
   if fugaActive then return end
@@ -1737,13 +1774,19 @@ EspBuffMacro = macro(200, "Buffs Auto", function()
       end
     end
   end
-end, buffsContent)
+end
 
 
 -- =============================================
 -- TAB: ATAQUE % (dinamico - adicionar/remover)
 -- =============================================
 local ataqueContent = espPanel5.scrollArea
+
+-- Macro placeholder (BotSwitch aparece no topo da aba)
+local _ataqueMacroCallback = nil
+EspAtaqueMacro = macro(100, "Ataque HP% Esp", function()
+  if _ataqueMacroCallback then _ataqueMacroCallback() end
+end, ataqueContent)
 
 -- Storage: lista de ataques
 if type(storage.esp_ataque_list) ~= "table" then
@@ -1828,8 +1871,8 @@ macro(100, function()
     end
 end)
 
--- Macro principal de ataque por HP%
-EspAtaqueMacro = macro(100, "Ataque HP% Esp", function()
+-- Macro de ataque callback (BotSwitch criado no topo da aba)
+_ataqueMacroCallback = function()
     if not g_game.isAttacking() then return end
     if isInPz() then return end
     -- Nao ataca durante fuga ativa
@@ -1852,7 +1895,7 @@ EspAtaqueMacro = macro(100, "Ataque HP% Esp", function()
             end
         end
     end
-end, ataqueContent)
+end
 
 -- Funcao para criar widget de um ataque
 local function createAtaqueWidget(index, ataqueData)
@@ -2056,6 +2099,12 @@ refreshAtaques()
 -- Suporta WASD (8 direcoes) e Arrows (4 direcoes)
 -- =============================================
 local stackContent = espPanel6.scrollArea
+
+-- Macro placeholder (BotSwitch aparece no topo da aba)
+local _stackMacroCallback = nil
+EspStackMacro = macro(50, "Stack Esp", function()
+  if _stackMacroCallback then _stackMacroCallback() end
+end, stackContent)
 
 -- Storage: lista de stacks
 if type(storage.esp_stack_list) ~= "table" then
@@ -2281,9 +2330,9 @@ macro(100, function()
     end
 end)
 
--- Macro principal de Stack
+-- Macro de Stack callback (BotSwitch criado no topo da aba)
 -- Funciona com: BOTAO DO MEIO DO MOUSE + TECLA DIRECIONAL
-EspStackMacro = macro(50, "Stack Esp", function()
+_stackMacroCallback = function()
     if isInPz() then return end
     if fugaActive then return end
 
@@ -2332,7 +2381,7 @@ EspStackMacro = macro(50, "Stack Esp", function()
             end
         end
     end
-end, stackContent)
+end
 
 -- Funcao para criar widget de um Stack
 local function createStackWidget(index, stackData)
@@ -2566,6 +2615,12 @@ refreshStacks()
 -- =============================================
 local retasContent = espPanel7.scrollArea
 
+-- Macro placeholder (BotSwitch aparece no topo da aba)
+local _retasMacroCallback = nil
+EspRetasMacro = macro(100, "Retas Esp", function()
+  if _retasMacroCallback then _retasMacroCallback() end
+end, retasContent)
+
 -- Storage: lista de retas
 if type(storage.esp_retas_list) ~= "table" then
   storage.esp_retas_list = {}
@@ -2767,8 +2822,8 @@ macro(100, function()
     end
 end)
 
--- Macro principal de Retas
-EspRetasMacro = macro(100, "Retas Esp", function()
+-- Macro de Retas callback (BotSwitch criado no topo da aba)
+_retasMacroCallback = function()
     if isInPz() then return end
     if fugaActive then return end
     if retasDelayEnd >= now then return end
@@ -2810,7 +2865,7 @@ EspRetasMacro = macro(100, "Retas Esp", function()
             end
         end
     end
-end, retasContent)
+end
 
 -- Funcao para criar widget de uma Reta
 local function createRetaWidget(index, retaData)
@@ -3087,6 +3142,12 @@ refreshRetas()
 -- =============================================
 local perseguirContent = espPanel8.scrollArea
 
+-- Macro placeholder (BotSwitch aparece no topo da aba)
+local _perseguirMacroCallback = nil
+EspPerseguirMacro = macro(100, "Perseguir Esp", function()
+  if _perseguirMacroCallback then _perseguirMacroCallback() end
+end, perseguirContent)
+
 -- Storage: lista de perseguir
 if type(storage.esp_perseguir_list) ~= "table" then
   storage.esp_perseguir_list = {}
@@ -3170,10 +3231,10 @@ macro(100, function()
     end
 end)
 
--- Macro principal de Perseguir
+-- Macro de Perseguir callback (BotSwitch criado no topo da aba)
 -- Logica: se o inimigo targetado tiver ate 3 sqm de distancia, nao faz nada
 -- Se tiver 4 ou mais sqm, usa a skill configurada
-EspPerseguirMacro = macro(100, "Perseguir Esp", function()
+_perseguirMacroCallback = function()
     if isInPz() then return end
     if fugaActive then return end
 
@@ -3207,7 +3268,7 @@ EspPerseguirMacro = macro(100, "Perseguir Esp", function()
             end
         end
     end
-end, perseguirContent)
+end
 
 -- Funcao para criar widget de um Perseguir
 local function createPerseguirWidget(index, perData)
@@ -3385,6 +3446,12 @@ refreshPerseguir()
 -- =============================================
 local genjutsuContent = espPanel9.scrollArea
 
+-- Macro placeholder (BotSwitch aparece no topo da aba)
+local _genjutsuMacroCallback = nil
+EspGenjutsuMacro = macro(100, "Genjutsus Esp", function()
+  if _genjutsuMacroCallback then _genjutsuMacroCallback() end
+end, genjutsuContent)
+
 -- Storage: lista de genjutsus
 if type(storage.esp_genjutsu_list) ~= "table" then
   storage.esp_genjutsu_list = {}
@@ -3488,8 +3555,8 @@ macro(100, function()
     end
 end)
 
--- Macro principal de genjutsu
-EspGenjutsuMacro = macro(100, "Genjutsus Esp", function()
+-- Macro de genjutsu callback (BotSwitch criado no topo da aba)
+_genjutsuMacroCallback = function()
     if not g_game.isAttacking() then return end
     if isInPz() then return end
     if fugaActive then return end
@@ -3530,7 +3597,7 @@ EspGenjutsuMacro = macro(100, "Genjutsus Esp", function()
             end
         end
     end
-end, genjutsuContent)
+end
 
 -- Funcao para criar widget de um genjutsu
 local function createGenjutsuWidget(index, genData)
@@ -3788,4 +3855,25 @@ end
 -- Load existing genjutsus on start
 refreshGenjutsus()
 
+
+-- =============================================
+-- CLEANUP: destruir todos os widgets de tela ao sair do jogo
+-- =============================================
+onGameEnd(function()
+  -- Destruir widgets de fuga na tela
+  for uid, sw in pairs(fugaScreenWidgets) do
+    if sw and sw.destroy then
+      pcall(function() sw:destroy() end)
+    end
+  end
+  fugaScreenWidgets = {}
+
+  -- Destruir widgets de status na tela (ataque, stack, retas, perseguir, genjutsu)
+  local screenWidgets = {espAtkWidget, espStackWidget, espRetasWidget, espPerseguirWidget, espGenjutsuWidget}
+  for _, w in ipairs(screenWidgets) do
+    if w and w.destroy then
+      pcall(function() w:destroy() end)
+    end
+  end
+end)
 

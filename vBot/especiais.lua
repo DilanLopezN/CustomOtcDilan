@@ -581,6 +581,23 @@ refreshFugas()
 
 -- Macro para atualizar os widgets na tela (status visual)
 macro(200, function()
+  -- Se o macro de fugas esta desligado, esconder todos os widgets
+  if not EspFugaMacro:isOn() then
+    for uid, sw in pairs(fugaScreenWidgets) do
+      if sw then sw:hide() end
+    end
+    return
+  end
+  -- Se o macro esta ligado, garantir que widgets com checkbox ativo estejam visiveis
+  for uid, sw in pairs(fugaScreenWidgets) do
+    if sw then
+      local showEnabled = storage.esp_fugas_widgets_show[uid] or storage.esp_fugas_widgets_show[tostring(uid)]
+      if showEnabled then
+        sw:show()
+      end
+    end
+  end
+
   for uid, sw in pairs(fugaScreenWidgets) do
     -- Encontrar fuga data pelo uid
     local fugaData = nil
@@ -1307,6 +1324,7 @@ local combosContent = espPanel3.scrollArea
 
 -- Macro placeholder (BotSwitch aparece no topo da aba)
 local _comboMacroCallback = nil
+local comboCurrentIndex = 1  -- indice do jutsu atual para execucao sequencial
 EspComboMacro = macro(100, "Combo Especial", function()
   if _comboMacroCallback then _comboMacroCallback() end
 end, combosContent)
@@ -1384,6 +1402,7 @@ comboSelectPanel.comboSelect.onOptionChange = function(widget)
   local text = widget:getCurrentOption().text
   local idx = tonumber(text:match("^(%d+)%.")) or 1
   storage.esp_combo_selected = idx
+  comboCurrentIndex = 1  -- resetar indice ao trocar de combo
   refreshCombos()
 end
 
@@ -1534,20 +1553,42 @@ end
 updateComboSelect()
 refreshCombos()
 
--- ===== Macro callback: executa TODOS os jutsus do combo na sequencia e recomeça =====
+-- ===== Macro callback: executa UM jutsu por ciclo, avancando sequencialmente =====
 _comboMacroCallback = function()
   if not g_game.isAttacking() then return end
   if not espCheckMacroDelay() then return end
   local sel = storage.esp_combo_selected
   local slot = storage.esp_combo_slots[sel]
-  if not slot then return end
+  if not slot or not slot.jutsus or #slot.jutsus == 0 then return end
 
-  for _, jutsu in ipairs(slot.jutsus) do
-    if jutsu.text and jutsu.text:len() > 0 then
-      say(jutsu.text)
-    end
+  local totalJutsus = #slot.jutsus
+  -- Garantir que o indice esta dentro do range
+  if comboCurrentIndex > totalJutsus then
+    comboCurrentIndex = 1
   end
-  espMarkMacroUsed()
+
+  -- Encontrar proximo jutsu valido a partir do indice atual
+  local startIndex = comboCurrentIndex
+  local found = false
+  repeat
+    local jutsu = slot.jutsus[comboCurrentIndex]
+    if jutsu and jutsu.text and jutsu.text:len() > 0 then
+      say(jutsu.text)
+      espMarkMacroUsed()
+      found = true
+      comboCurrentIndex = comboCurrentIndex + 1
+      if comboCurrentIndex > totalJutsus then
+        comboCurrentIndex = 1
+      end
+      return
+    end
+    comboCurrentIndex = comboCurrentIndex + 1
+    if comboCurrentIndex > totalJutsus then
+      comboCurrentIndex = 1
+    end
+  until comboCurrentIndex == startIndex
+
+  -- Se nenhum jutsu valido foi encontrado, nao faz nada
 end
 
 -- =============================================
@@ -1754,7 +1795,9 @@ _buffMacroCallback = function()
   if isInPz() then return end
   -- Nao usa buffs durante fuga ativa
   if fugaActive then return end
+  if not espCheckMacroDelay() then return end
 
+  local usedAny = false
   for _, b in ipairs(storage.esp_buffs_list) do
     if b.text and b.text:len() > 0 then
       local uid = b.uid
@@ -1765,14 +1808,15 @@ _buffMacroCallback = function()
 
       -- Se o buff nao esta ativo e nao esta em CD, usa
       if now >= activeEnd and now >= cdEnd then
-        if not espCheckMacroDelay() then return end
         say(b.text)
-        espMarkMacroUsed()
         buffActiveEnd[uid] = now + activeTimeMs
         buffCooldownEnd[uid] = now + activeTimeMs + cooldownMs
-        break  -- Usa um buff por ciclo para o servidor processar corretamente
+        usedAny = true
       end
     end
+  end
+  if usedAny then
+    espMarkMacroUsed()
   end
 end
 

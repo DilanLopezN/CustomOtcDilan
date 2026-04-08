@@ -82,6 +82,39 @@ macro(1, 'virar target', function()
   end
 end)
 
+UI.Separator()
+
+-- ==========================================
+-- FIX TARGET - salva ultimo player atacado, Tab re-ataca
+-- ==========================================
+storage.fixTargetLastName = storage.fixTargetLastName or nil
+
+local fixTargetMacro = macro(50, 'Fix Target', function()
+  -- Salva o ultimo player que estamos atacando
+  if g_game.isAttacking() then
+    local target = g_game.getAttackingCreature()
+    if target and target:isPlayer() and target:getName() ~= player:getName() then
+      storage.fixTargetLastName = target:getName()
+    end
+  end
+end)
+
+-- Ao pressionar Tab, re-ataca o ultimo player salvo
+onKeyPress(function(keys)
+  if keys ~= "Tab" then return end
+  if not fixTargetMacro:isOn() then return end
+  if not storage.fixTargetLastName then return end
+
+  local savedName = storage.fixTargetLastName
+  local creatures = g_map.getSpectators(pos(), false)
+  for _, creature in ipairs(creatures) do
+    if creature:isPlayer() and creature:getName() == savedName then
+      g_game.attack(creature)
+      return
+    end
+  end
+end)
+
 -- Agora todos os elementos UI/macros abaixo ficarão nessa tab
 UI.Separator()
 

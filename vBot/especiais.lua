@@ -807,6 +807,22 @@ _fugaMacroCallback = function()
 
           if not espCheckMacroDelay() then
             fugaActive = false
+            -- Restaurar macros que foram pausados antes do delay check
+            local restoreMacrosBailout = {
+              { name = "trap",      ref = EspTrapMacro },
+              { name = "combo",     ref = EspComboMacro },
+              { name = "buff",      ref = EspBuffMacro },
+              { name = "ataque",    ref = EspAtaqueMacro },
+              { name = "stack",     ref = EspStackMacro },
+              { name = "retas",     ref = EspRetasMacro },
+              { name = "perseguir", ref = EspPerseguirMacro },
+              { name = "genjutsu",  ref = EspGenjutsuMacro },
+            }
+            for _, m in ipairs(restoreMacrosBailout) do
+              if m.ref and espMacrosWereOn[m.name] and not m.ref:isOn() then
+                m.ref.setOn()
+              end
+            end
             return
           end
           say(f.text)
@@ -908,6 +924,12 @@ _fugaMacroCallback = function()
 
       if not espCheckMacroDelay() then
         fugaActive = false
+        -- Restaurar macros que foram pausados antes do delay check
+        for _, m in ipairs(allEspMacros) do
+          if m.ref and espMacrosWereOn[m.name] and not m.ref:isOn() then
+            m.ref.setOn()
+          end
+        end
         return
       end
       say(f.text)

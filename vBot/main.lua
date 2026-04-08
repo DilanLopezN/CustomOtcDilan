@@ -62,9 +62,10 @@ if rootWidget then
       saveEspeciaisProfile()
       widget:setText("Salvo!")
       widget:setColor("#FFD700")
-      schedule(1500, function()
+      schedule(800, function()
         widget:setText("Salvar Tudo")
         widget:setColor("#00FF88")
+        EspeciaisWindow:hide()
       end)
     end
 

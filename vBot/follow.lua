@@ -574,9 +574,60 @@ end)
 UI.Separator()
 UI.Label("Uteis Geral")
 
-addTextEdit("Kunai", storage.Kunai or "7382", function(widget, text) 
+addTextEdit("Kunai", storage.Kunai or "7382", function(widget, text)
     storage.Kunai = text
 end, scpPanel)
+
+-- Dash Kunai SQMs configuravel
+if not storage.dashKunaiSQM then storage.dashKunaiSQM = 8 end
+
+local dashSqmPanel = setupUI([[
+Panel
+  height: 24
+  Label
+    id: lbl
+    anchors.left: parent.left
+    anchors.verticalCenter: parent.verticalCenter
+    text-auto-resize: true
+    color: white
+    font: verdana-11px-rounded
+  Button
+    id: btnMinus
+    anchors.right: btnPlus.left
+    anchors.verticalCenter: parent.verticalCenter
+    margin-right: 4
+    width: 22
+    height: 22
+    text: -
+    color: red
+  Button
+    id: btnPlus
+    anchors.right: parent.right
+    anchors.verticalCenter: parent.verticalCenter
+    width: 22
+    height: 22
+    text: +
+    color: green
+]], scpPanel)
+
+local function updateDashLabel()
+  dashSqmPanel.lbl:setText("Dash SQMs: " .. storage.dashKunaiSQM)
+end
+updateDashLabel()
+
+dashSqmPanel.btnMinus.onClick = function()
+  if storage.dashKunaiSQM > 1 then
+    storage.dashKunaiSQM = storage.dashKunaiSQM - 1
+    updateDashLabel()
+  end
+end
+
+dashSqmPanel.btnPlus.onClick = function()
+  if storage.dashKunaiSQM < 15 then
+    storage.dashKunaiSQM = storage.dashKunaiSQM + 1
+    updateDashLabel()
+  end
+end
 
 local superDashUseWith = macro(100, "Dash Kunai", "shift+e+0", function() end, scpPanel)
 
@@ -586,16 +637,16 @@ function funcSuperDashUseWith(parent)
     end
 
     onKeyPress(function(keys)
-        local itemUseId = tonumber(storage.Kunai) -- CORREÇÃO: converter para número
-        local dashSQMs = 8
-        local dashSQMs2 = 6
+        local itemUseId = tonumber(storage.Kunai)
+        local dashSQMs = storage.dashKunaiSQM or 8
+        local dashSQMs2 = math.max(1, dashSQMs - 2)
 
         if not superDashUseWith:isOn() then
             return
         end
-        
+
         local consoleModule = modules.game_console
-        
+
         if (keys == "W" and not consoleModule:isChatEnabled()) or keys == "Up" then
             schedule(50, function()
                 local moveToTile = g_map.getTile({x = posx(), y = posy() - dashSQMs2, z = posz()})
@@ -628,7 +679,7 @@ function funcSuperDashUseWith(parent)
     end)
 end
 
-funcSuperDashUseWith() -- Não esqueça de chamar a função
+funcSuperDashUseWith()
 
 Turn = {}
 

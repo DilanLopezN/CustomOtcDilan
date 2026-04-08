@@ -1,7 +1,7 @@
 {
+    "enabled": false,
+    "target": false,
     "spells": [
 
-    ],
-    "target": false,
-    "enabled": false
+    ]
 }

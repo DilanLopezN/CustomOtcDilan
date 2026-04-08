@@ -727,22 +727,37 @@ end)
 bijuuInput:setFont("verdana-11px-rounded")
 bijuuInput:setColor("white")
 bijuuInput:setTooltip("Coloque o ID da outfit da Bijuu")
+local bijuuCombos = {
+  [158] = {"Bijuu Yaiba","Bijuu Sabaku Kyu","Ultimate Bijuu Dama","Bijuu Sabaku Taisou","Bijuu Shudan"},
+  [161] = {"Bijuu Yaiba","Ultimate Bijuu Dama","Bijuu Katon Ryuka","Bijuu Katon Endan","Bijuu Katon no Jutsu"},
+  [303] = {"Bijuu Yaiba","Bijuu Suigadan","Ultimate Bijuu Dama","Bijuu Goshokuzame","Bijuu Suisahan"},
+  [269] = {"Bijuu Yaiba","Bijuu Yokai Furie","Bijuu Yokai Youton","Ultimate Bijuu Dama","Bijuu Youton Shaku Karyu"},
+  [162] = {"Bijuu Yaiba","Ultimate Bijuu Dama","Bijuu Yuugeton Koogeki","Bijuu Chinbou","Bijuu Suihei"},
+  [301] = {"Bijuu Yaiba","Ultimate Bijuu Dama","Bijuu Doku Chiri","Bijuu Suiton Homatsu","Bijuu Chiyute Saisei"},
+  [302] = {"Bijuu Yaiba","Bijuu Yaiba","Ultimate Bijuu Dama","Bijuu Fuujin","Bijuu Doton Kouka"},
+  [268] = {"Bijuu Yaiba","Bijuu Chikara","Ultimate Bijuu Dama","Bijuu Yoroi Sokudo","Bijuu Shokushu"},
+  [531] = {"Bijuu Yaiba","Bijuu Dai Panchi","Ultimate Bijuu Dama","Bijuu Renzoku Dama","Bijuu Chakura Tenso"},
+}
 
 macro(50, "Bijuu Macro", function()
-  local outfitId = tonumber(storage.bijuuOutfitId) or 301
+  local oid = outfit().type
+  local combo = bijuuCombos[oid]
+
+
+  if not combo then return end
+
+
   if outfit().type ~= outfitId then return end
+
   
-  -- Heal
   if hppercent() <= 99 then
     say("Bijuu regeneration")
   end
-  
-  -- Combo
+
   if g_game.isAttacking() then
-    say("Bijuu Sabaku Kyu")
-    say("Ultimate Bijuu Dama")
-    say("Bijuu Sabaku Taisou")
-    say("Bijuu Shudan")
+    for _, spell in ipairs(combo) do
+      say(spell)
+    end
   end
 end)
 

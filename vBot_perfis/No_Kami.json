@@ -11,18 +11,26 @@
 
   ],
   "bgPlayer": {
-    "opacity": "99",
+    "opacity": "FF",
     "currentBG": "obitowall.png",
     "applyPanel": true,
     "applyContents": true,
     "applyWindow": true
   },
-  "esp_fugas_widgets_pos": [
-
-  ],
+  "esp_fugas_widgets_pos": {
+    "0": {
+      "x": 504,
+      "y": 373
+    },
+    "1": {
+      "x": 467,
+      "y": 458
+    }
+  },
   "esp_fugas_list": [
     {
       "uid": 0,
+      "enabled": true,
       "order": 2,
       "text": "kawarimi no jutsu",
       "burst": false,
@@ -57,14 +65,15 @@
   "esp_genjutsu_list": [
 
   ],
-  "esp_macro_delay": 100,
+  "esp_macro_delay": 50,
   "esp_combo_slots": [
     {
       "name": "Combo 1",
       "jutsus": [
         {
-          "text": "gedou shinsei ",
-          "cooldown": 2000
+          "enabled": true,
+          "cooldown": 2000,
+          "text": "gedou shinsei "
         },
         {
           "text": "katon bakufu ranbu ",
@@ -123,17 +132,17 @@
       "trapTime": 3,
       "hpPercent": 100,
       "await": true,
-      "cooldown": 40,
+      "uid": 1,
       "text": "keiyaku fuin ",
-      "uid": 1
+      "cooldown": 40
     },
     {
       "trapTime": 3,
       "hpPercent": 100,
       "await": false,
-      "cooldown": 30,
+      "uid": 0,
       "text": "doton prision",
-      "uid": 0
+      "cooldown": 30
     }
   ],
   "esp_anti_burst": true,

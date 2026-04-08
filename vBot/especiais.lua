@@ -266,6 +266,16 @@ Panel
     text-auto-resize: true
 
   CheckBox
+    id: enabledCheck
+    anchors.top: parent.top
+    anchors.right: showOnScreen.left
+    margin-right: 5
+    margin-top: 2
+    text: On
+    color: #00FF00
+    text-auto-resize: true
+
+  CheckBox
     id: showOnScreen
     anchors.top: parent.top
     anchors.right: burstCheck.left
@@ -440,6 +450,14 @@ Panel
     input:setColor("#00DDFF")
   end
 
+  -- Checkbox "enabled" (on/off individual)
+  entry.enabledCheck:setChecked(fugaData.enabled ~= false)
+  entry.enabledCheck.onClick = function(w)
+    local checked = not w:isChecked()
+    w:setChecked(checked)
+    storage.esp_fugas_list[index].enabled = checked
+  end
+
   -- Checkbox "mostrar na tela"
   entry.showOnScreen:setChecked(storage.esp_fugas_widgets_show[uid] or storage.esp_fugas_widgets_show[tostring(uid)] or false)
   entry.showOnScreen.onClick = function(w)
@@ -570,7 +588,8 @@ addBtn.addFuga.onClick = function(w)
     order = newIndex,
     quantidade = 1,
     cdQuantidade = 2,
-    uid = newUid
+    uid = newUid,
+    enabled = true
   })
   refreshFugas()
 end
@@ -704,7 +723,7 @@ Panel
 ]], fugasContent)
 
 antiBurstPanel.antiBurstCheck:setChecked(storage.esp_anti_burst or false)
-antiBurstPanel.antiBurstCheck:setTooltip("Se ativo, detecta quando HP cai mais de 60% em 3 segundos e usa uma fuga com 'Burst' marcado")
+antiBurstPanel.antiBurstCheck:setTooltip("Se ativo, detecta quando HP cai mais de 60% em 2 segundos e usa uma fuga com 'Burst' marcado")
 antiBurstPanel.antiBurstCheck.onClick = function(w)
   storage.esp_anti_burst = not storage.esp_anti_burst
   w:setChecked(storage.esp_anti_burst)
@@ -719,8 +738,8 @@ macro(200, function()
   if not storage.esp_anti_burst then return end
   local currentHp = player:getHealthPercent()
   table.insert(hpHistory, { time = now, hp = currentHp })
-  -- Remove entradas mais antigas que 3 segundos
-  while #hpHistory > 0 and (now - hpHistory[1].time) > 3000 do
+  -- Remove entradas mais antigas que 2 segundos
+  while #hpHistory > 0 and (now - hpHistory[1].time) > 2000 do
     table.remove(hpHistory, 1)
   end
 end)
@@ -747,10 +766,10 @@ _fugaMacroCallback = function()
   -- =============================================
   -- ANTI-BURST: verifica burst e usa fuga marcada
   -- =============================================
-  if storage.esp_anti_burst and not fugaActive and isBurstDetected() and (now - lastBurstTrigger) > 3000 then
+  if storage.esp_anti_burst and not fugaActive and isBurstDetected() and (now - lastBurstTrigger) > 2000 then
     -- Busca uma fuga com burst=true que esteja fora de cooldown
     for i, f in ipairs(storage.esp_fugas_list) do
-      if f.burst and f.text and f.text:len() > 0 then
+      if f.burst and f.text and f.text:len() > 0 and f.enabled ~= false then
         local uid = f.uid
         local cdEnd = fugaCooldownEnd[uid] or 0
         if now >= cdEnd then
@@ -832,7 +851,7 @@ _fugaMacroCallback = function()
   -- Monta lista ordenada por campo ordem
   local fugaList = {}
   for i, f in ipairs(storage.esp_fugas_list) do
-    if f.text and f.text:len() > 0 then
+    if f.text and f.text:len() > 0 and f.enabled ~= false then
       table.insert(fugaList, { index = i, data = f, uid = f.uid })
     end
   end
@@ -1029,6 +1048,16 @@ Panel
     font: verdana-11px-rounded
     text: Trap
 
+  CheckBox
+    id: enabledCheck
+    anchors.top: parent.top
+    anchors.left: title.right
+    margin-left: 8
+    margin-top: 2
+    text: On
+    color: #00FF00
+    text-auto-resize: true
+
   Button
     id: upBtn
     anchors.top: parent.top
@@ -1159,6 +1188,14 @@ Panel
   entry.row3.hpEdit:setText(tostring(trapData.hpPercent or 100))
   entry.row4.awaitCheck:setChecked(trapData.await or false)
 
+  -- Checkbox "enabled" (on/off individual)
+  entry.enabledCheck:setChecked(trapData.enabled ~= false)
+  entry.enabledCheck.onClick = function(w)
+    local checked = not w:isChecked()
+    w:setChecked(checked)
+    storage.esp_trap_list[index].enabled = checked
+  end
+
   -- Estilo: fundo transparente e texto neon azul nos inputs
   local trapInputs = {entry.spellEdit, entry.row1.cdEdit, entry.row2.trapTimeEdit, entry.row3.hpEdit}
   for _, input in ipairs(trapInputs) do
@@ -1256,7 +1293,8 @@ addTrapBtn.addTrap.onClick = function(w)
     trapTime = 3,
     hpPercent = 100,
     await = false,
-    uid = newUid
+    uid = newUid,
+    enabled = true
   })
   refreshTraps()
 end
@@ -1275,7 +1313,7 @@ _trapMacroCallback = function()
   local targetHpPercent = target:getHealthPercent()
 
   for i, trap in ipairs(storage.esp_trap_list) do
-    if trap.text and trap.text:len() > 0 then
+    if trap.text and trap.text:len() > 0 and trap.enabled ~= false then
       local uid = trap.uid
       local cooldownMs = (tonumber(trap.cooldown) or 5) * 1000
       local trapTimeMs = (tonumber(trap.trapTime) or 3) * 1000
@@ -1453,6 +1491,15 @@ Panel
     font: verdana-11px-rounded
     text: Jutsu
 
+  CheckBox
+    id: enabledCheck
+    anchors.left: title.right
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 5
+    text: On
+    color: #00FF00
+    text-auto-resize: true
+
   Button
     id: removeBtn
     color: red
@@ -1464,7 +1511,7 @@ Panel
 
   TextEdit
     id: spellEdit
-    anchors.left: title.right
+    anchors.left: enabledCheck.right
     anchors.right: removeBtn.left
     anchors.verticalCenter: parent.verticalCenter
     height: 22
@@ -1477,6 +1524,17 @@ Panel
   entry.spellEdit:setText(jutsuData.text or "")
   entry.spellEdit:setBackgroundColor("#00000033")
   entry.spellEdit:setColor("#00DDFF")
+
+  -- Checkbox "enabled" (on/off individual)
+  entry.enabledCheck:setChecked(jutsuData.enabled ~= false)
+  entry.enabledCheck.onClick = function(w)
+    local checked = not w:isChecked()
+    w:setChecked(checked)
+    local slot = storage.esp_combo_slots[slotIndex]
+    if slot and slot.jutsus[jutsuIndex] then
+      slot.jutsus[jutsuIndex].enabled = checked
+    end
+  end
 
   entry.spellEdit.onTextChange = function(w, text)
     if comboRefreshing then return end
@@ -1541,7 +1599,7 @@ Panel
     local curSel = storage.esp_combo_selected
     local curSlot = storage.esp_combo_slots[curSel]
     if curSlot then
-      table.insert(curSlot.jutsus, { text = "" })
+      table.insert(curSlot.jutsus, { text = "", enabled = true })
       refreshCombos()
     end
   end
@@ -1572,7 +1630,7 @@ _comboMacroCallback = function()
   local found = false
   repeat
     local jutsu = slot.jutsus[comboCurrentIndex]
-    if jutsu and jutsu.text and jutsu.text:len() > 0 then
+    if jutsu and jutsu.text and jutsu.text:len() > 0 and jutsu.enabled ~= false then
       say(jutsu.text)
       espMarkMacroUsed()
       found = true
@@ -1641,6 +1699,16 @@ Panel
     color: #00CCFF
     font: verdana-11px-rounded
     text: Buff
+
+  CheckBox
+    id: enabledCheck
+    anchors.top: parent.top
+    anchors.left: title.right
+    margin-left: 8
+    margin-top: 2
+    text: On
+    color: #00FF00
+    text-auto-resize: true
 
   Button
     id: removeBtn
@@ -1715,6 +1783,14 @@ Panel
   entry.row1.activeEdit:setText(tostring(buffData.activeTime or 10))
   entry.row2.cdEdit:setText(tostring(buffData.cooldown or 30))
 
+  -- Checkbox "enabled" (on/off individual)
+  entry.enabledCheck:setChecked(buffData.enabled ~= false)
+  entry.enabledCheck.onClick = function(w)
+    local checked = not w:isChecked()
+    w:setChecked(checked)
+    storage.esp_buffs_list[index].enabled = checked
+  end
+
   -- Estilo: fundo transparente e texto neon azul nos inputs
   local buffInputs = {entry.spellEdit, entry.row1.activeEdit, entry.row2.cdEdit}
   for _, input in ipairs(buffInputs) do
@@ -1781,7 +1857,8 @@ addBuffBtn.addBuff.onClick = function(w)
     text = "",
     activeTime = 10,
     cooldown = 30,
-    uid = newUid
+    uid = newUid,
+    enabled = true
   })
   refreshBuffs()
 end
@@ -1799,7 +1876,7 @@ _buffMacroCallback = function()
 
   local usedAny = false
   for _, b in ipairs(storage.esp_buffs_list) do
-    if b.text and b.text:len() > 0 then
+    if b.text and b.text:len() > 0 and b.enabled ~= false then
       local uid = b.uid
       local activeTimeMs = (tonumber(b.activeTime) or 10) * 1000
       local cooldownMs = (tonumber(b.cooldown) or 30) * 1000
@@ -1928,7 +2005,7 @@ _ataqueMacroCallback = function()
     local targetHp = target:getHealthPercent()
 
     for _, atk in ipairs(storage.esp_ataque_list) do
-        if atk.spell and atk.spell ~= "" and targetHp <= (atk.hp or 100) then
+        if atk.spell and atk.spell ~= "" and atk.enabled ~= false and targetHp <= (atk.hp or 100) then
             local uid = atk.uid
             if now >= (ataqueCooldownEnd[uid] or 0) then
                 if not espCheckMacroDelay() then return end
@@ -1956,6 +2033,16 @@ Panel
     color: #FF6600
     font: verdana-11px-rounded
     text: Ataque
+
+  CheckBox
+    id: enabledCheck
+    anchors.top: parent.top
+    anchors.left: title.right
+    margin-left: 8
+    margin-top: 2
+    text: On
+    color: #00FF00
+    text-auto-resize: true
 
   Button
     id: removeBtn
@@ -2047,6 +2134,14 @@ Panel
 
   entry.title:setText("Ataque #" .. index)
   entry.spellEdit:setText(ataqueData.spell or "")
+
+  -- Checkbox "enabled" (on/off individual)
+  entry.enabledCheck:setChecked(ataqueData.enabled ~= false)
+  entry.enabledCheck.onClick = function(w)
+    local checked = not w:isChecked()
+    w:setChecked(checked)
+    storage.esp_ataque_list[index].enabled = checked
+  end
   entry.row1.nameEdit:setText(ataqueData.name or "")
   entry.row2.hpEdit:setText(tostring(ataqueData.hp or 90))
   entry.row3.cdEdit:setText(tostring(ataqueData.cd or 2))
@@ -2127,7 +2222,8 @@ addAtaqueBtn.addAtaque.onClick = function(w)
     name = "",
     hp = 90,
     cd = 2,
-    uid = newUid
+    uid = newUid,
+    enabled = true
   })
   refreshAtaques()
 end
@@ -2443,6 +2539,16 @@ Panel
     font: verdana-11px-rounded
     text: Stack
 
+  CheckBox
+    id: enabledCheck
+    anchors.top: parent.top
+    anchors.left: title.right
+    margin-left: 8
+    margin-top: 2
+    text: On
+    color: #00FF00
+    text-auto-resize: true
+
   Button
     id: removeBtn
     color: red
@@ -2553,6 +2659,14 @@ Panel
 
   entry.title:setText("Stack #" .. index)
   entry.spellEdit:setText(stackData.spell or "")
+
+  -- Checkbox "enabled" (on/off individual)
+  entry.enabledCheck:setChecked(stackData.enabled ~= false)
+  entry.enabledCheck.onClick = function(w)
+    local checked = not w:isChecked()
+    w:setChecked(checked)
+    storage.esp_stack_list[index].enabled = checked
+  end
   entry.row1.nameEdit:setText(stackData.name or "")
   entry.row3.distEdit:setText(tostring(stackData.distance or 5))
   entry.row4.cdEdit:setText(tostring(stackData.cd or 2))
@@ -2644,7 +2758,8 @@ addStackBtn.addStack.onClick = function(w)
     key = "WASD",
     distance = 5,
     cd = 2,
-    uid = newUid
+    uid = newUid,
+    enabled = true
   })
   refreshStacks()
 end
@@ -2883,7 +2998,7 @@ _retasMacroCallback = function()
     end
 
     for _, ret in ipairs(storage.esp_retas_list) do
-        if ret.spell and ret.spell ~= "" then
+        if ret.spell and ret.spell ~= "" and ret.enabled ~= false then
             local uid = ret.uid
             if now >= (retasCooldownEnd[uid] or 0) then
                 local shouldActivate = false
@@ -2926,6 +3041,16 @@ Panel
     color: #00FF88
     font: verdana-11px-rounded
     text: Reta
+
+  CheckBox
+    id: enabledCheck
+    anchors.top: parent.top
+    anchors.left: title.right
+    margin-left: 8
+    margin-top: 2
+    text: On
+    color: #00FF00
+    text-auto-resize: true
 
   Button
     id: removeBtn
@@ -3057,6 +3182,14 @@ Panel
 
   entry.title:setText("Reta #" .. index)
   entry.spellEdit:setText(retaData.spell or "")
+
+  -- Checkbox "enabled" (on/off individual)
+  entry.enabledCheck:setChecked(retaData.enabled ~= false)
+  entry.enabledCheck.onClick = function(w)
+    local checked = not w:isChecked()
+    w:setChecked(checked)
+    storage.esp_retas_list[index].enabled = checked
+  end
   entry.row1.nameEdit:setText(retaData.name or "")
   entry.row3.distEdit:setText(tostring(retaData.distance or 4))
   entry.row4.cdEdit:setText(tostring(retaData.cd or 2))
@@ -3169,7 +3302,8 @@ addRetaBtn.addReta.onClick = function(w)
     distance = 4,
     cd = 2,
     hpPercent = 100,
-    uid = newUid
+    uid = newUid,
+    enabled = true
   })
   refreshRetas()
 end
@@ -3330,6 +3464,16 @@ Panel
     font: verdana-11px-rounded
     text: Perseguir
 
+  CheckBox
+    id: enabledCheck
+    anchors.top: parent.top
+    anchors.left: title.right
+    margin-left: 8
+    margin-top: 2
+    text: On
+    color: #00FF00
+    text-auto-resize: true
+
   Button
     id: removeBtn
     color: red
@@ -3400,6 +3544,14 @@ Panel
 
   entry.title:setText("Perseguir #" .. index)
   entry.spellEdit:setText(perData.spell or "")
+
+  -- Checkbox "enabled" (on/off individual)
+  entry.enabledCheck:setChecked(perData.enabled ~= false)
+  entry.enabledCheck.onClick = function(w)
+    local checked = not w:isChecked()
+    w:setChecked(checked)
+    storage.esp_perseguir_list[index].enabled = checked
+  end
   entry.row1.nameEdit:setText(perData.name or "")
   entry.row2.cdEdit:setText(tostring(perData.cd or 2))
 
@@ -3473,7 +3625,8 @@ addPerseguirBtn.addPerseguir.onClick = function(w)
     spell = "",
     name = "",
     cd = 2,
-    uid = newUid
+    uid = newUid,
+    enabled = true
   })
   refreshPerseguir()
 end
@@ -3564,7 +3717,7 @@ local function isAnyFugaAvailable()
   if type(storage.esp_fugas_list) ~= "table" then return false end
   local hp = player:getHealthPercent()
   for _, f in ipairs(storage.esp_fugas_list) do
-    if f.text and f.text:len() > 0 then
+    if f.text and f.text:len() > 0 and f.enabled ~= false then
       local hpThreshold = tonumber(f.hp) or 50
       if hp <= hpThreshold then
         local uid = f.uid
@@ -3612,7 +3765,7 @@ _genjutsuMacroCallback = function()
     local targetHp = target:getHealthPercent()
 
     for _, gen in ipairs(storage.esp_genjutsu_list) do
-        if gen.spell and gen.spell ~= "" then
+        if gen.spell and gen.spell ~= "" and gen.enabled ~= false then
             local uid = gen.uid
             local hpThreshold = tonumber(gen.hp) or 50
 
@@ -3658,6 +3811,16 @@ Panel
     color: #CC00FF
     font: verdana-11px-rounded
     text: Genjutsu
+
+  CheckBox
+    id: enabledCheck
+    anchors.top: parent.top
+    anchors.left: title.right
+    margin-left: 8
+    margin-top: 2
+    text: On
+    color: #00FF00
+    text-auto-resize: true
 
   Button
     id: removeBtn
@@ -3780,6 +3943,14 @@ Panel
 
   entry.title:setText("Genjutsu #" .. index)
   entry.spellEdit:setText(genData.spell or "")
+
+  -- Checkbox "enabled" (on/off individual)
+  entry.enabledCheck:setChecked(genData.enabled ~= false)
+  entry.enabledCheck.onClick = function(w)
+    local checked = not w:isChecked()
+    w:setChecked(checked)
+    storage.esp_genjutsu_list[index].enabled = checked
+  end
   entry.row1.nameEdit:setText(genData.name or "")
   entry.row2.hpEdit:setText(tostring(genData.hp or 50))
   entry.row3.cdEdit:setText(tostring(genData.cd or 5))
@@ -3891,7 +4062,8 @@ addGenjutsuBtn.addGenjutsu.onClick = function(w)
     tipo = "defensivo",
     hp = 30,
     cd = 5,
-    uid = newUid
+    uid = newUid,
+    enabled = true
   })
   refreshGenjutsus()
 end

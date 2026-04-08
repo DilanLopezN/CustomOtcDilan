@@ -1,4 +1,94 @@
 {
+  "healbot": [
+    {
+      "Delay": true,
+      "spellTable": [
+        {
+          "index": 1,
+          "sign": "<",
+          "origin": "HP%",
+          "spell": "big regeneration",
+          "cost": 1,
+          "value": 99,
+          "enabled": true
+        }
+      ],
+      "itemTable": [
+
+      ],
+      "enabled": true,
+      "Interval": true,
+      "MessageDelay": false,
+      "Cooldown": true,
+      "Visible": true,
+      "Conditions": true,
+      "name": "Profile #1"
+    },
+    {
+      "Delay": true,
+      "spellTable": [
+
+      ],
+      "itemTable": [
+
+      ],
+      "enabled": false,
+      "Interval": true,
+      "MessageDelay": false,
+      "Cooldown": true,
+      "Visible": true,
+      "Conditions": true,
+      "name": "Profile #2"
+    },
+    {
+      "Delay": true,
+      "spellTable": [
+
+      ],
+      "itemTable": [
+
+      ],
+      "enabled": false,
+      "Interval": true,
+      "MessageDelay": false,
+      "Cooldown": true,
+      "Visible": true,
+      "Conditions": true,
+      "name": "Profile #3"
+    },
+    {
+      "Delay": true,
+      "spellTable": [
+
+      ],
+      "itemTable": [
+
+      ],
+      "enabled": false,
+      "Interval": true,
+      "MessageDelay": false,
+      "Cooldown": true,
+      "Visible": true,
+      "Conditions": true,
+      "name": "Profile #4"
+    },
+    {
+      "Delay": true,
+      "spellTable": [
+
+      ],
+      "itemTable": [
+
+      ],
+      "enabled": false,
+      "Interval": true,
+      "MessageDelay": false,
+      "Cooldown": true,
+      "Visible": true,
+      "Conditions": true,
+      "name": "Profile #5"
+    }
+  ],
   "currentHealBotProfile": 1,
   "ConditionPanel": {
     "utanaCost": 440,
@@ -23,99 +113,9 @@
     "cureBleed": false,
     "bleedCost": 45,
     "hasteSpell": "concentrate chakra feet",
-    "enabled": false,
     "holdUtamo": false,
     "utamoCost": 40,
-    "holdUtana": false
-  },
-  "healbot": [
-    {
-      "name": "Profile #1",
-      "Delay": true,
-      "spellTable": [
-        {
-          "sign": "<",
-          "index": 1,
-          "cost": 1,
-          "enabled": true,
-          "origin": "HP%",
-          "value": 99,
-          "spell": "big regeneration"
-        }
-      ],
-      "Cooldown": true,
-      "itemTable": [
-
-      ],
-      "Visible": true,
-      "enabled": true,
-      "Interval": true,
-      "MessageDelay": false,
-      "Conditions": true
-    },
-    {
-      "name": "Profile #2",
-      "Delay": true,
-      "spellTable": [
-
-      ],
-      "Cooldown": true,
-      "itemTable": [
-
-      ],
-      "Visible": true,
-      "enabled": false,
-      "Interval": true,
-      "MessageDelay": false,
-      "Conditions": true
-    },
-    {
-      "name": "Profile #3",
-      "Delay": true,
-      "spellTable": [
-
-      ],
-      "Cooldown": true,
-      "itemTable": [
-
-      ],
-      "Visible": true,
-      "enabled": false,
-      "Interval": true,
-      "MessageDelay": false,
-      "Conditions": true
-    },
-    {
-      "name": "Profile #4",
-      "Delay": true,
-      "spellTable": [
-
-      ],
-      "Cooldown": true,
-      "itemTable": [
-
-      ],
-      "Visible": true,
-      "enabled": false,
-      "Interval": true,
-      "MessageDelay": false,
-      "Conditions": true
-    },
-    {
-      "name": "Profile #5",
-      "Delay": true,
-      "spellTable": [
-
-      ],
-      "Cooldown": true,
-      "itemTable": [
-
-      ],
-      "Visible": true,
-      "enabled": false,
-      "Interval": true,
-      "MessageDelay": false,
-      "Conditions": true
-    }
-  ]
+    "holdUtana": false,
+    "enabled": false
+  }
 }

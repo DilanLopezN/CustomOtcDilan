@@ -1,0 +1,58 @@
+{
+  "esp_macro_delay": 50,
+  "esp_stack_list": [
+
+  ],
+  "esp_combo_selected": 1,
+  "esp_buffs_list": [
+
+  ],
+  "esp_fugas_list": [
+
+  ],
+  "esp_genjutsu_list": [
+
+  ],
+  "bgPlayer": {
+    "bgColor": "#000000",
+    "applyPanel": true,
+    "applyContents": true,
+    "applyWindow": true,
+    "opacity": "99"
+  },
+  "esp_combo_slots": [
+
+  ],
+  "ingame_hotkeys": "",
+  "visualCustom": {
+    "hideSeparators": true,
+    "styleMacros": true,
+    "transparentBotButtons": false,
+    "corText": "#FF3333",
+    "styleButtons": true,
+    "styleTabs": true
+  },
+  "esp_trap_list": [
+
+  ],
+  "esp_auto_kai": [
+
+  ],
+  "esp_ataque_list": [
+
+  ],
+  "esp_anti_burst": false,
+  "esp_fugas_widgets_show": [
+
+  ],
+  "esp_perseguir_list": [
+
+  ],
+  "_originalName": "Gengiskhan",
+  "esp_fugas_widgets_pos": [
+
+  ],
+  "esp_retas_list": [
+
+  ]
+}

@@ -1,100 +1,158 @@
 {
-  "esp_combo_list": [
-    {
-      "text": "kamui"
-    }
-  ],
-  "esp_stack_list": [
-    {
-      "spell": "stack 1",
-      "cd": 2,
-      "distance": 5,
-      "key": "WASD",
-      "uid": 0,
-      "name": ""
-    }
-  ],
-  "_originalName": "No Kami",
-  "bgPlayer": {
-    "opacity": "99",
-    "applyContents": true,
-    "applyWindow": true,
-    "applyPanel": true,
-    "currentBG": "obitowall.png"
-  },
-  "ingame_hotkeys": "\n\n   \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nlocal caveAntesKamui\nlocal emKamui = false\nlocal tempoLiberado = 0\n\nlocal TILE_KAMUI = 13870\n\n\nonTextMessage(function(mode, text)\n\n  if emKamui then return end\n\n  if text:lower():find(\"voce esta no mundo do kamui\") then\n\n    caveAntesKamui =\n      storage._configs.cavebot_configs.selected\n\n    CaveBot.setOff()\n    storage._configs.cavebot_configs.selected = \"saida_kamui\"\n    CaveBot.setOn()\n\n    emKamui = true\n    tempoLiberado = now + 42000\n  end\n\nend)\n\n\nmacro(300, function()\n\n  if not emKamui then return end\n  if now < tempoLiberado then return end\n\n  local player = g_game.getLocalPlayer()\n  if not player then return end\n\n  local tile = g_map.getTile(player:getPosition())\n  if not tile then return end\n\n  local ground = tile:getGround()\n  if not ground then return end\n\n\n  if ground:getId() ~= TILE_KAMUI then\n\n    if caveAntesKamui then\n\n      CaveBot.setOff()\n      storage._configs.cavebot_configs.selected = caveAntesKamui\n      CaveBot.setOn()\n\n    end\n\n    emKamui = false\n  end\n\nend)\n\n-- Label\nlabelcc = UI.Label(\"Filtro Battle\")\nlabelcc:setFont(\"verdana-11px-rounded\")\nlabelcc:setColor(\"orange\")\n\n-- UI do Filtro\nFiltroIcon = setupUI([[\nPanel\n  height: 20\n  margin-top: 3\n  \n  Panel\n    id: inicio\n    anchors.top: parent.top\n    anchors.left: parent.left\n    margin-left: 0\n    width: 200\n    height: 20\n    font: verdana-11px-rounded\n    opacity: 0.80\n\n  BattlePlayers\n    id: players\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: parent.left\n    margin-left: 27\n    image-source: /images/game/battle/battle_players\n    !tooltip: tr('Filtrar players.')\n\n  BattleNPCs\n    id: npcs\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: prev.left\n    margin-left: 30\n    image-source: /images/game/battle/battle_npcs\n    !tooltip: tr('Filtrar Npcs.')\n\n  BattleMonsters\n    id: mobs\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: prev.left\n    margin-left: 30\n    image-source: /images/game/battle/battle_monsters\n    !tooltip: tr('Filtrar mobs.')\n\n  BattleSkulls\n    id: sempk\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: prev.left\n    margin-left: 30\n    image-source: /images/game/battle/battle_skulls\n    !tooltip: tr('Filtrar Player sem PK.')\n\n  BattleParty\n    id: party\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: prev.left\n    margin-left: 30\n    image-source: /images/game/battle/battle_party\n    !tooltip: tr('Filtrar Membros do Grupo.')\n]], panel)\n\n-- Storage\nstorage.FiltroPlayers = storage.FiltroPlayers or false\nstorage.FiltroNpcs = storage.FiltroNpcs or false\nstorage.FiltroMobs = storage.FiltroMobs or false\nstorage.FiltroSkull = storage.FiltroSkull or false\nstorage.FiltroParty = storage.FiltroParty or false\n\n-- Atualização visual dos ícones\nmacro(100, function()\n  FiltroIcon.players:setImageColor(storage.FiltroPlayers and '#696969' or '#FFFFFF')\n  FiltroIcon.npcs:setImageColor(storage.FiltroNpcs and '#696969' or '#FFFFFF')\n  FiltroIcon.mobs:setImageColor(storage.FiltroMobs and '#696969' or '#FFFFFF')\n  FiltroIcon.sempk:setImageColor(storage.FiltroSkull and '#696969' or '#FFFFFF')\n  FiltroIcon.party:setImageColor(storage.FiltroParty and '#696969' or '#FFFFFF')\nend)\n\n-- Clicks\nFiltroIcon.players.onClick = function() storage.FiltroPlayers = not storage.FiltroPlayers end\nFiltroIcon.npcs.onClick = function() storage.FiltroNpcs = not storage.FiltroNpcs end\nFiltroIcon.mobs.onClick = function() storage.FiltroMobs = not storage.FiltroMobs end\nFiltroIcon.sempk.onClick = function() storage.FiltroSkull = not storage.FiltroSkull end\nFiltroIcon.party.onClick = function() storage.FiltroParty = not storage.FiltroParty end\n\n-- Macro de controle\nFiltrarBattle = macro(1, function() end)\n\n-- Override do filtro da battle\nmodules.game_battle.doCreatureFitFilters = function(creature)\n  if creature:isLocalPlayer() or creature:getHealthPercent() <= 0 then\n    return false\n  end\n  local pos = creature:getPosition()\n  if not pos or pos.z ~= posz() or not creature:canBeSeen() then return false end\n\n  if creature:isMonster() and FiltrarBattle.isOn() and storage.FiltroMobs then\n    return false\n  elseif creature:isPlayer() and FiltrarBattle.isOn() and storage.FiltroPlayers then\n    return false\n  elseif creature:isNpc() and FiltrarBattle.isOn() and storage.FiltroNpcs then\n    return false\n  elseif creature:isPlayer() and (creature:getEmblem() == 1 or creature:getShield() == 3 or creature:getShield() == 4) and FiltrarBattle.isOn() and storage.FiltroParty then\n    return false\n  elseif creature:isPlayer() and creature:getSkull() == 0 and storage.FiltroSkull then\n    return false\n  end\n  return true\nend\n\n\n\n",
-  "esp_retas_list": [
-
-  ],
-  "esp_fugas_list": [
-    {
-      "order": 2,
-      "text": "kawarimi no jutsu",
-      "uid": 0,
-      "hp": 75,
-      "activeTime": 3,
-      "cooldown": 35
-    },
-    {
-      "cooldown": 10,
-      "text": "kamui muzan",
-      "order": 2,
-      "quantidade": 1,
-      "cdQuantidade": 2,
-      "hp": 50,
-      "activeTime": 3,
-      "uid": 1
-    }
-  ],
   "esp_auto_kai": {
     "spell": "utani hur",
     "enabled": false
   },
-  "esp_trap_list": [
-    {
-      "cooldown": 30,
-      "text": "doton prision",
-      "await": false,
-      "hpPercent": 100,
-      "uid": 0,
-      "trapTime": 3
-    },
-    {
-      "cooldown": 40,
-      "text": "keiyaku fuin ",
-      "await": true,
-      "hpPercent": 100,
-      "uid": 1,
-      "trapTime": 3
-    }
+  "esp_fugas_widgets_show": {
+    "0": true,
+    "1": true
+  },
+  "esp_perseguir_list": [
+
   ],
+  "bgPlayer": {
+    "opacity": "99",
+    "currentBG": "obitowall.png",
+    "applyPanel": true,
+    "applyContents": true,
+    "applyWindow": true
+  },
   "esp_fugas_widgets_pos": [
 
   ],
-  "esp_buffs_list": [
+  "esp_fugas_list": [
     {
-      "cooldown": 62,
-      "text": "kamui protect",
-      "activeTime": 60,
-      "uid": 0
+      "uid": 0,
+      "order": 2,
+      "text": "kawarimi no jutsu",
+      "burst": false,
+      "activeTime": 3,
+      "hp": 75,
+      "cooldown": 35
     },
     {
-      "cooldown": 61,
-      "text": "kekkei genkai",
-      "activeTime": 60,
-      "uid": 1
+      "quantidade": 1,
+      "text": "kamui muzan",
+      "burst": true,
+      "cooldown": 10,
+      "order": 2,
+      "hp": 50,
+      "uid": 1,
+      "cdQuantidade": 2,
+      "activeTime": 3
     }
   ],
-  "esp_fugas_widgets_show": [
+  "ingame_hotkeys": "\n\n   \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nlocal caveAntesKamui\nlocal emKamui = false\nlocal tempoLiberado = 0\n\nlocal TILE_KAMUI = 13870\n\n\nonTextMessage(function(mode, text)\n\n  if emKamui then return end\n\n  if text:lower():find(\"voce esta no mundo do kamui\") then\n\n    caveAntesKamui =\n      storage._configs.cavebot_configs.selected\n\n    CaveBot.setOff()\n    storage._configs.cavebot_configs.selected = \"saida_kamui\"\n    CaveBot.setOn()\n\n    emKamui = true\n    tempoLiberado = now + 42000\n  end\n\nend)\n\n\nmacro(300, function()\n\n  if not emKamui then return end\n  if now < tempoLiberado then return end\n\n  local player = g_game.getLocalPlayer()\n  if not player then return end\n\n  local tile = g_map.getTile(player:getPosition())\n  if not tile then return end\n\n  local ground = tile:getGround()\n  if not ground then return end\n\n\n  if ground:getId() ~= TILE_KAMUI then\n\n    if caveAntesKamui then\n\n      CaveBot.setOff()\n      storage._configs.cavebot_configs.selected = caveAntesKamui\n      CaveBot.setOn()\n\n    end\n\n    emKamui = false\n  end\n\nend)\n\n-- Label\nlabelcc = UI.Label(\"Filtro Battle\")\nlabelcc:setFont(\"verdana-11px-rounded\")\nlabelcc:setColor(\"orange\")\n\n-- UI do Filtro\nFiltroIcon = setupUI([[\nPanel\n  height: 20\n  margin-top: 3\n  \n  Panel\n    id: inicio\n    anchors.top: parent.top\n    anchors.left: parent.left\n    margin-left: 0\n    width: 200\n    height: 20\n    font: verdana-11px-rounded\n    opacity: 0.80\n\n  BattlePlayers\n    id: players\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: parent.left\n    margin-left: 27\n    image-source: /images/game/battle/battle_players\n    !tooltip: tr('Filtrar players.')\n\n  BattleNPCs\n    id: npcs\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: prev.left\n    margin-left: 30\n    image-source: /images/game/battle/battle_npcs\n    !tooltip: tr('Filtrar Npcs.')\n\n  BattleMonsters\n    id: mobs\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: prev.left\n    margin-left: 30\n    image-source: /images/game/battle/battle_monsters\n    !tooltip: tr('Filtrar mobs.')\n\n  BattleSkulls\n    id: sempk\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: prev.left\n    margin-left: 30\n    image-source: /images/game/battle/battle_skulls\n    !tooltip: tr('Filtrar Player sem PK.')\n\n  BattleParty\n    id: party\n    border: 1 #778899\n    anchors.top: parent.top\n    anchors.left: prev.left\n    margin-left: 30\n    image-source: /images/game/battle/battle_party\n    !tooltip: tr('Filtrar Membros do Grupo.')\n]], panel)\n\n-- Storage\nstorage.FiltroPlayers = storage.FiltroPlayers or false\nstorage.FiltroNpcs = storage.FiltroNpcs or false\nstorage.FiltroMobs = storage.FiltroMobs or false\nstorage.FiltroSkull = storage.FiltroSkull or false\nstorage.FiltroParty = storage.FiltroParty or false\n\n-- Atualização visual dos ícones\nmacro(100, function()\n  FiltroIcon.players:setImageColor(storage.FiltroPlayers and '#696969' or '#FFFFFF')\n  FiltroIcon.npcs:setImageColor(storage.FiltroNpcs and '#696969' or '#FFFFFF')\n  FiltroIcon.mobs:setImageColor(storage.FiltroMobs and '#696969' or '#FFFFFF')\n  FiltroIcon.sempk:setImageColor(storage.FiltroSkull and '#696969' or '#FFFFFF')\n  FiltroIcon.party:setImageColor(storage.FiltroParty and '#696969' or '#FFFFFF')\nend)\n\n-- Clicks\nFiltroIcon.players.onClick = function() storage.FiltroPlayers = not storage.FiltroPlayers end\nFiltroIcon.npcs.onClick = function() storage.FiltroNpcs = not storage.FiltroNpcs end\nFiltroIcon.mobs.onClick = function() storage.FiltroMobs = not storage.FiltroMobs end\nFiltroIcon.sempk.onClick = function() storage.FiltroSkull = not storage.FiltroSkull end\nFiltroIcon.party.onClick = function() storage.FiltroParty = not storage.FiltroParty end\n\n-- Macro de controle\nFiltrarBattle = macro(1, function() end)\n\n-- Override do filtro da battle\nmodules.game_battle.doCreatureFitFilters = function(creature)\n  if creature:isLocalPlayer() or creature:getHealthPercent() <= 0 then\n    return false\n  end\n  local pos = creature:getPosition()\n  if not pos or pos.z ~= posz() or not creature:canBeSeen() then return false end\n\n  if creature:isMonster() and FiltrarBattle.isOn() and storage.FiltroMobs then\n    return false\n  elseif creature:isPlayer() and FiltrarBattle.isOn() and storage.FiltroPlayers then\n    return false\n  elseif creature:isNpc() and FiltrarBattle.isOn() and storage.FiltroNpcs then\n    return false\n  elseif creature:isPlayer() and (creature:getEmblem() == 1 or creature:getShield() == 3 or creature:getShield() == 4) and FiltrarBattle.isOn() and storage.FiltroParty then\n    return false\n  elseif creature:isPlayer() and creature:getSkull() == 0 and storage.FiltroSkull then\n    return false\n  end\n  return true\nend\n\n\n\n",
+  "visualCustom": {
+    "hideSeparators": true,
+    "styleMacros": true,
+    "transparentBotButtons": false,
+    "corText": "#FF3333",
+    "styleButtons": true,
+    "styleTabs": true
+  },
+  "esp_ataque_list": [
 
   ],
-  "esp_ataque_list": [
+  "esp_genjutsu_list": [
+
+  ],
+  "esp_macro_delay": 100,
+  "esp_combo_slots": [
     {
-      "spell": "ataque 1",
-      "cd": 2,
-      "hp": 90,
-      "uid": 0,
-      "name": ""
+      "name": "Combo 1",
+      "jutsus": [
+        {
+          "text": "gedou shinsei ",
+          "cooldown": 2000
+        },
+        {
+          "text": "katon bakufu ranbu ",
+          "cooldown": 1000
+        },
+        {
+          "text": "katon karyu endan ",
+          "cooldown": 1000
+        },
+        {
+          "text": "katon katohenke no jutsu",
+          "cooldown": 1000
+        },
+        {
+          "text": "senka no en ",
+          "cooldown": 1000
+        },
+        {
+          "text": "kamui",
+          "cooldown": 1000
+        }
+      ]
+    },
+    {
+      "name": "Combo 2",
+      "jutsus": [
+
+      ]
+    },
+    {
+      "name": "Combo 3",
+      "jutsus": [
+
+      ]
+    },
+    {
+      "name": "Combo 4",
+      "jutsus": [
+
+      ]
+    },
+    {
+      "name": "Combo 5",
+      "jutsus": [
+
+      ]
     }
+  ],
+  "esp_stack_list": [
+
+  ],
+  "esp_combo_selected": 1,
+  "esp_trap_list": [
+    {
+      "enabled": true,
+      "trapTime": 3,
+      "hpPercent": 100,
+      "await": true,
+      "cooldown": 40,
+      "text": "keiyaku fuin ",
+      "uid": 1
+    },
+    {
+      "trapTime": 3,
+      "hpPercent": 100,
+      "await": false,
+      "cooldown": 30,
+      "text": "doton prision",
+      "uid": 0
+    }
+  ],
+  "esp_anti_burst": true,
+  "_originalName": "No Kami",
+  "esp_buffs_list": [
+    {
+      "uid": 0,
+      "activeTime": 60,
+      "cooldown": 62,
+      "text": "kamui protect"
+    },
+    {
+      "uid": 1,
+      "activeTime": 60,
+      "cooldown": 61,
+      "text": "kekkei genkai"
+    }
+  ],
+  "esp_retas_list": [
+
   ]
 }

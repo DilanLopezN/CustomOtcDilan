@@ -46,6 +46,8 @@ function saveEspeciaisProfile()
       data.esp_macro_delay = storage.esp_macro_delay or 50
       data.visualCustom = deepCopyJson(storage.visualCustom or {})
       data.esp_anti_burst = storage.esp_anti_burst or false
+      data.esp_anti_burst_drop = storage.esp_anti_burst_drop or 40
+      data.esp_anti_burst_window = storage.esp_anti_burst_window or 1500
       data._originalName = charName
       local sName = charName:gsub("[^%w_%-]", "_")
       local fileName = PERFIS_DIR .. sName .. ".json"
@@ -147,6 +149,24 @@ end
 local trapsWereOn = false
 local combosWereOn = false
 
+-- Helper: obtem posicao atual (indice 1-based) de uma fuga pelo uid
+local function getFugaPosition(uid)
+  for i, f in ipairs(storage.esp_fugas_list) do
+    if f.uid == uid then return i end
+  end
+  return nil
+end
+
+-- Helper: nome de exibicao baseado na posicao atual + spell
+local function getFugaDisplayName(fugaData, position)
+  local pos = position or getFugaPosition(fugaData.uid) or "?"
+  local spell = fugaData.text
+  if spell and spell:len() > 0 then
+    return "Fuga " .. pos .. ": " .. spell
+  end
+  return "Fuga " .. pos
+end
+
 -- Funcao para criar widget na tela de uma fuga
 local function createFugaScreenWidget(uid, fugaData, displayIndex)
   if not fugaData then return end
@@ -159,23 +179,25 @@ local function createFugaScreenWidget(uid, fugaData, displayIndex)
 
   local screenWidget = g_ui.loadUIFromString([[
 UIWidget
-  background-color: #00000000
+  background-color: #00000055
   opacity: 1.0
-  height: 26
-  width: 280
+  height: 22
+  width: 200
   focusable: true
   phantom: false
   draggable: true
+  border-width: 1
+  border-color: #00AACC
 
   Label
     id: statusText
     anchors.fill: parent
     text-align: center
     font: verdana-11px-rounded
-    color: green
+    color: #00FF88
     text: OK
     padding: 2
-    text-auto-resize: true
+    text-auto-resize: false
 ]], g_ui.getRootWidget())
 
   -- Posicao salva ou padrao
@@ -185,7 +207,7 @@ UIWidget
     screenWidget:move(savedPos.x, savedPos.y)
   else
     screenWidget:breakAnchors()
-    screenWidget:move(300, 50 + (displayIndex - 1) * 34)
+    screenWidget:move(300, 50 + (displayIndex - 1) * 26)
   end
 
   -- Drag handlers
@@ -202,11 +224,11 @@ UIWidget
 
   screenWidget.onDragLeave = function(widget)
     storage.esp_fugas_widgets_pos[uid] = { x = widget:getX(), y = widget:getY() }
+    storage.esp_fugas_widgets_pos[tostring(uid)] = nil
     return true
   end
 
-  local spellName = (fugaData.text and fugaData.text:len() > 0) and fugaData.text or ("Fuga #" .. (uid + 1))
-  screenWidget.statusText:setText(spellName .. " | OK")
+  screenWidget.statusText:setText(getFugaDisplayName(fugaData, displayIndex) .. " | OK")
 
   -- Sempre visivel quando criado (so e criado se checkbox ativo)
   screenWidget:show()
@@ -235,16 +257,23 @@ local function createFugaWidget(index, fugaData)
   local uid = fugaData.uid
   local entry = setupUI([[
 Panel
-  height: 260
-  margin-top: 3
+  height: 250
+  margin-top: 4
+  background-color: #0A0A0A55
+  border-width: 1
+  border-color: #00AACC
+  padding: 4
 
   Label
     id: title
     anchors.top: parent.top
     anchors.left: parent.left
+    margin-left: 2
+    margin-top: 2
     color: #00FFFF
     font: verdana-11px-rounded
     text: Fuga
+    text-auto-resize: true
 
   Button
     id: removeBtn
@@ -255,11 +284,43 @@ Panel
     height: 18
     text: X
 
+  Button
+    id: downBtn
+    color: #AAFFAA
+    anchors.top: parent.top
+    anchors.right: removeBtn.left
+    margin-right: 3
+    width: 20
+    height: 18
+    text: v
+
+  Button
+    id: upBtn
+    color: #AAFFAA
+    anchors.top: parent.top
+    anchors.right: downBtn.left
+    margin-right: 3
+    width: 20
+    height: 18
+    text: ^
+
+  Button
+    id: dragBtn
+    color: #FFCC66
+    anchors.top: parent.top
+    anchors.right: upBtn.left
+    margin-right: 6
+    width: 22
+    height: 18
+    text: ::
+    draggable: true
+    tooltip: Arraste para reordenar
+
   CheckBox
     id: burstCheck
     anchors.top: parent.top
-    anchors.right: removeBtn.left
-    margin-right: 5
+    anchors.right: dragBtn.left
+    margin-right: 6
     margin-top: 2
     text: Burst
     color: #FF6666
@@ -363,28 +424,8 @@ Panel
       width: 55
 
   Panel
-    id: row4
-    anchors.top: row3.bottom
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: 24
-    margin-top: 2
-    Label
-      anchors.left: parent.left
-      anchors.verticalCenter: parent.verticalCenter
-      text: Ordem:
-      color: white
-      text-auto-resize: true
-    TextEdit
-      id: orderEdit
-      anchors.right: parent.right
-      anchors.top: parent.top
-      anchors.bottom: parent.bottom
-      width: 55
-
-  Panel
     id: row5
-    anchors.top: row4.bottom
+    anchors.top: row3.bottom
     anchors.left: parent.left
     anchors.right: parent.right
     height: 24
@@ -424,13 +465,11 @@ Panel
 
   ]], fugasContent)
 
-  local displayName = (fugaData.text and fugaData.text:len() > 0) and fugaData.text or ("Fuga #" .. (uid + 1))
-  entry.title:setText(displayName)
+  entry.title:setText(getFugaDisplayName(fugaData, index))
   entry.spellEdit:setText(fugaData.text or "")
   entry.row1.hpEdit:setText(tostring(fugaData.hp or 50))
   entry.row2.activeEdit:setText(tostring(fugaData.activeTime or 3))
   entry.row3.cdEdit:setText(tostring(fugaData.cooldown or 10))
-  entry.row4.orderEdit:setText(tostring(fugaData.order or index))
   entry.row5.qtdEdit:setText(tostring(fugaData.quantidade or 1))
   entry.row6.cdQtdEdit:setText(tostring(fugaData.cdQuantidade or 2))
 
@@ -439,12 +478,11 @@ Panel
   entry.row1.hpEdit:setTooltip("Porcentagem de HP para ativar a fuga (ex: 50 = ativa quando HP <= 50%)")
   entry.row2.activeEdit:setTooltip("Tempo em segundos que a fuga fica ativa apos ser usada")
   entry.row3.cdEdit:setTooltip("Tempo de cooldown em segundos apos usar todas as cargas")
-  entry.row4.orderEdit:setTooltip("Prioridade da fuga (menor numero = maior prioridade)")
   entry.row5.qtdEdit:setTooltip("Quantidade de vezes que vai usar antes de entrar em cooldown")
   entry.row6.cdQtdEdit:setTooltip("Cooldown em segundos entre cada uso quando tem multiplas cargas")
 
   -- Estilo: fundo transparente e texto neon azul nos inputs
-  local fugaInputs = {entry.spellEdit, entry.row1.hpEdit, entry.row2.activeEdit, entry.row3.cdEdit, entry.row4.orderEdit, entry.row5.qtdEdit, entry.row6.cdQtdEdit}
+  local fugaInputs = {entry.spellEdit, entry.row1.hpEdit, entry.row2.activeEdit, entry.row3.cdEdit, entry.row5.qtdEdit, entry.row6.cdQtdEdit}
   for _, input in ipairs(fugaInputs) do
     input:setBackgroundColor("#00000033")
     input:setColor("#00DDFF")
@@ -455,7 +493,9 @@ Panel
   entry.enabledCheck.onClick = function(w)
     local checked = not w:isChecked()
     w:setChecked(checked)
-    storage.esp_fugas_list[index].enabled = checked
+    for _, f in ipairs(storage.esp_fugas_list) do
+      if f.uid == uid then f.enabled = checked break end
+    end
   end
 
   -- Checkbox "mostrar na tela"
@@ -464,9 +504,11 @@ Panel
     local checked = not w:isChecked()
     w:setChecked(checked)
     storage.esp_fugas_widgets_show[uid] = checked
+    storage.esp_fugas_widgets_show[tostring(uid)] = nil
     if checked then
+      local curIdx = getFugaPosition(uid) or index
       if not fugaScreenWidgets[uid] then
-        createFugaScreenWidget(uid, fugaData, index)
+        createFugaScreenWidget(uid, fugaData, curIdx)
       else
         fugaScreenWidgets[uid]:show()
       end
@@ -488,55 +530,138 @@ Panel
   entry.burstCheck.onClick = function(w)
     local checked = not w:isChecked()
     w:setChecked(checked)
-    storage.esp_fugas_list[index].burst = checked
+    for _, f in ipairs(storage.esp_fugas_list) do
+      if f.uid == uid then f.burst = checked break end
+    end
+  end
+
+  -- Helpers: sempre atualiza dados pelo uid atual (robusto a reordenacoes)
+  local function findByUid()
+    for i, f in ipairs(storage.esp_fugas_list) do
+      if f.uid == uid then return i, f end
+    end
+    return nil, nil
   end
 
   entry.spellEdit.onTextChange = function(w, text)
     if fugaRefreshing then return end
-    storage.esp_fugas_list[index].text = text
-    -- Atualizar titulo dinamicamente
-    local newName = (text and text:len() > 0) and text or ("Fuga #" .. (uid + 1))
-    entry.title:setText(newName)
+    local i, f = findByUid()
+    if not f then return end
+    f.text = text
+    entry.title:setText(getFugaDisplayName(f, i))
   end
   entry.row1.hpEdit.onTextChange = function(w, text)
     if fugaRefreshing then return end
-    storage.esp_fugas_list[index].hp = tonumber(text) or 50
+    local _, f = findByUid()
+    if not f then return end
+    f.hp = tonumber(text) or 50
   end
   entry.row2.activeEdit.onTextChange = function(w, text)
     if fugaRefreshing then return end
-    storage.esp_fugas_list[index].activeTime = tonumber(text) or 3
+    local _, f = findByUid()
+    if not f then return end
+    f.activeTime = tonumber(text) or 3
   end
   entry.row3.cdEdit.onTextChange = function(w, text)
     if fugaRefreshing then return end
-    storage.esp_fugas_list[index].cooldown = tonumber(text) or 10
-  end
-  entry.row4.orderEdit.onTextChange = function(w, text)
-    if fugaRefreshing then return end
-    storage.esp_fugas_list[index].order = tonumber(text) or index
+    local _, f = findByUid()
+    if not f then return end
+    f.cooldown = tonumber(text) or 10
   end
   entry.row5.qtdEdit.onTextChange = function(w, text)
     if fugaRefreshing then return end
-    storage.esp_fugas_list[index].quantidade = tonumber(text) or 1
+    local _, f = findByUid()
+    if not f then return end
+    f.quantidade = tonumber(text) or 1
   end
   entry.row6.cdQtdEdit.onTextChange = function(w, text)
     if fugaRefreshing then return end
-    storage.esp_fugas_list[index].cdQuantidade = tonumber(text) or 2
+    local _, f = findByUid()
+    if not f then return end
+    f.cdQuantidade = tonumber(text) or 2
+  end
+
+  -- Botoes de reordenacao (up/down)
+  entry.upBtn:setTooltip("Mover fuga para cima (maior prioridade)")
+  entry.upBtn.onClick = function(w)
+    local i = findByUid()
+    if not i or i <= 1 then return end
+    local tmp = storage.esp_fugas_list[i]
+    storage.esp_fugas_list[i] = storage.esp_fugas_list[i - 1]
+    storage.esp_fugas_list[i - 1] = tmp
+    refreshFugas()
+  end
+  entry.downBtn:setTooltip("Mover fuga para baixo (menor prioridade)")
+  entry.downBtn.onClick = function(w)
+    local i = findByUid()
+    if not i or i >= #storage.esp_fugas_list then return end
+    local tmp = storage.esp_fugas_list[i]
+    storage.esp_fugas_list[i] = storage.esp_fugas_list[i + 1]
+    storage.esp_fugas_list[i + 1] = tmp
+    refreshFugas()
+  end
+
+  -- Drag and drop via botao :: (computa nova posicao ao soltar)
+  entry.dragBtn.onDragEnter = function(w, mousePos)
+    w.dragStartY = mousePos.y
+    w.dragLastY = mousePos.y
+    w.dragStartIndex = findByUid()
+    entry:setBackgroundColor("#003344AA")
+    return true
+  end
+  entry.dragBtn.onDragMove = function(w, mousePos)
+    w.dragLastY = mousePos.y
+    return true
+  end
+  entry.dragBtn.onDragLeave = function(w)
+    local startY = w.dragStartY
+    local lastY = w.dragLastY
+    local startIdx = w.dragStartIndex
+    w.dragStartY = nil
+    w.dragLastY = nil
+    w.dragStartIndex = nil
+    if startY and lastY and startIdx then
+      local slotH = entry:getHeight() + 4
+      if slotH <= 0 then slotH = 254 end
+      local deltaY = lastY - startY
+      local shift = math.floor((deltaY + (deltaY >= 0 and slotH/2 or -slotH/2)) / slotH)
+      if shift ~= 0 then
+        local newIdx = startIdx + shift
+        if newIdx < 1 then newIdx = 1 end
+        if newIdx > #storage.esp_fugas_list then newIdx = #storage.esp_fugas_list end
+        if newIdx ~= startIdx then
+          local item = table.remove(storage.esp_fugas_list, startIdx)
+          table.insert(storage.esp_fugas_list, newIdx, item)
+          refreshFugas()
+          return true
+        end
+      end
+    end
+    -- Sem reordenacao: apenas restaura o fundo padrao
+    if entry and entry.setBackgroundColor then
+      entry:setBackgroundColor("#0A0A0A55")
+    end
+    return true
   end
 
   entry.removeBtn.onClick = function(w)
+    local i = findByUid()
+    if not i then return end
     -- Destroi widget da tela
     if fugaScreenWidgets[uid] then
       fugaScreenWidgets[uid]:destroy()
       fugaScreenWidgets[uid] = nil
     end
-    -- Limpa storage por uid
+    -- Limpa storage por uid (numerico e string, pos-load JSON)
     storage.esp_fugas_widgets_show[uid] = nil
+    storage.esp_fugas_widgets_show[tostring(uid)] = nil
     storage.esp_fugas_widgets_pos[uid] = nil
+    storage.esp_fugas_widgets_pos[tostring(uid)] = nil
     -- Limpa cooldowns
     fugaCooldownEnd[uid] = nil
     fugaActiveEnd[uid] = nil
     fugaUsesLeft[uid] = nil
-    table.remove(storage.esp_fugas_list, index)
+    table.remove(storage.esp_fugas_list, i)
     refreshFugas()
   end
 
@@ -577,7 +702,6 @@ end
 
 -- Add button click
 addBtn.addFuga.onClick = function(w)
-  local newIndex = #storage.esp_fugas_list + 1
   local newUid = fugaIdCounter
   fugaIdCounter = fugaIdCounter + 1
   table.insert(storage.esp_fugas_list, {
@@ -585,11 +709,11 @@ addBtn.addFuga.onClick = function(w)
     hp = 50,
     activeTime = 3,
     cooldown = 10,
-    order = newIndex,
     quantidade = 1,
     cdQuantidade = 2,
     uid = newUid,
-    enabled = true
+    enabled = true,
+    burst = false
   })
   refreshFugas()
 end
@@ -630,7 +754,7 @@ macro(200, function()
     end
 
     if sw and fugaData then
-      local spellName = (fugaData.text and fugaData.text:len() > 0) and fugaData.text or ("Fuga #" .. (uid + 1))
+      local label = getFugaDisplayName(fugaData, fugaIndex)
       local activeEnd = fugaActiveEnd[uid] or 0
       local cdEnd = fugaCooldownEnd[uid] or 0
       local qtd = tonumber(fugaData.quantidade) or 1
@@ -642,20 +766,20 @@ macro(200, function()
         if qtd > 1 and usesRemaining then
           usesInfo = " [" .. usesRemaining .. "x]"
         end
-        sw.statusText:setText(spellName .. " | ATIVA: " .. remaining .. "s" .. usesInfo)
+        sw.statusText:setText(label .. " | ATIVA " .. remaining .. "s" .. usesInfo)
         sw.statusText:setColor("#FFFF00")
       elseif cdEnd > 0 and now < cdEnd then
         local remaining = math.ceil((cdEnd - now) / 1000)
-        sw.statusText:setText(spellName .. " | CD: " .. remaining .. "s")
-        sw.statusText:setColor("#FF4444")
+        sw.statusText:setText(label .. " | CD " .. remaining .. "s")
+        sw.statusText:setColor("#FF6666")
       else
         local usesInfo = ""
         if qtd > 1 then
           local left = usesRemaining or qtd
           usesInfo = " [" .. left .. "x]"
         end
-        sw.statusText:setText(spellName .. " | OK" .. usesInfo)
-        sw.statusText:setColor("#00FF00")
+        sw.statusText:setText(label .. " | OK" .. usesInfo)
+        sw.statusText:setColor("#00FF88")
       end
     end
   end
@@ -709,295 +833,267 @@ UI.Separator(fugasContent)
 if storage.esp_anti_burst == nil then
   storage.esp_anti_burst = false
 end
+if type(storage.esp_anti_burst_drop) ~= "number" then
+  storage.esp_anti_burst_drop = 40  -- HP% perdido em janela curta
+end
+if type(storage.esp_anti_burst_window) ~= "number" then
+  storage.esp_anti_burst_window = 1500  -- janela em ms (1.5s)
+end
 
 local antiBurstPanel = setupUI([[
 Panel
-  height: 24
+  height: 72
+  background-color: #1A050555
+  border-width: 1
+  border-color: #FF4444
+  padding: 4
+
   CheckBox
     id: antiBurstCheck
+    anchors.top: parent.top
     anchors.left: parent.left
-    anchors.verticalCenter: parent.verticalCenter
+    margin-top: 2
     text: Anti-Burst (detecta burst e usa fuga marcada)
     color: #FF4444
     text-auto-resize: true
+
+  Panel
+    id: rowDrop
+    anchors.top: antiBurstCheck.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 22
+    margin-top: 2
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: Queda HP% para disparar:
+      color: white
+      text-auto-resize: true
+    TextEdit
+      id: dropEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 55
+
+  Panel
+    id: rowWin
+    anchors.top: rowDrop.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 22
+    margin-top: 2
+    Label
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: Janela (ms):
+      color: white
+      text-auto-resize: true
+    TextEdit
+      id: winEdit
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: 55
 ]], fugasContent)
 
 antiBurstPanel.antiBurstCheck:setChecked(storage.esp_anti_burst or false)
-antiBurstPanel.antiBurstCheck:setTooltip("Se ativo, detecta quando HP cai mais de 60% em 2 segundos e usa uma fuga com 'Burst' marcado")
+antiBurstPanel.antiBurstCheck:setTooltip("Se ativo, detecta queda rapida de HP e usa uma fuga com 'Burst' marcado")
 antiBurstPanel.antiBurstCheck.onClick = function(w)
   storage.esp_anti_burst = not storage.esp_anti_burst
   w:setChecked(storage.esp_anti_burst)
+end
+antiBurstPanel.rowDrop.dropEdit:setText(tostring(storage.esp_anti_burst_drop or 40))
+antiBurstPanel.rowDrop.dropEdit:setBackgroundColor("#00000033")
+antiBurstPanel.rowDrop.dropEdit:setColor("#00DDFF")
+antiBurstPanel.rowDrop.dropEdit:setTooltip("HP% perdido dentro da janela para disparar o anti-burst")
+antiBurstPanel.rowDrop.dropEdit.onTextChange = function(w, text)
+  storage.esp_anti_burst_drop = tonumber(text) or 40
+end
+antiBurstPanel.rowWin.winEdit:setText(tostring(storage.esp_anti_burst_window or 1500))
+antiBurstPanel.rowWin.winEdit:setBackgroundColor("#00000033")
+antiBurstPanel.rowWin.winEdit:setColor("#00DDFF")
+antiBurstPanel.rowWin.winEdit:setTooltip("Tempo (ms) para avaliar a queda de HP")
+antiBurstPanel.rowWin.winEdit.onTextChange = function(w, text)
+  storage.esp_anti_burst_window = math.max(300, tonumber(text) or 1500)
 end
 
 -- Historico de HP para deteccao de burst
 local hpHistory = {}  -- { {time=ms, hp=percent}, ... }
 local lastBurstTrigger = 0  -- timestamp do ultimo trigger de burst
 
--- Macro para rastrear HP a cada 200ms
-macro(200, function()
-  if not storage.esp_anti_burst then return end
+-- Macro para rastrear HP a cada 100ms (mais responsivo)
+macro(100, function()
   local currentHp = player:getHealthPercent()
   table.insert(hpHistory, { time = now, hp = currentHp })
-  -- Remove entradas mais antigas que 2 segundos
-  while #hpHistory > 0 and (now - hpHistory[1].time) > 2000 do
+  local window = storage.esp_anti_burst_window or 1500
+  while #hpHistory > 0 and (now - hpHistory[1].time) > window do
     table.remove(hpHistory, 1)
   end
 end)
 
 -- Funcao para verificar se esta sendo burstado
--- Retorna true se HP caiu mais de 60 pontos percentuais nos ultimos 3 segundos
 local function isBurstDetected()
+  if not storage.esp_anti_burst then return false end
   if #hpHistory < 2 then return false end
   local maxHp = 0
   for _, entry in ipairs(hpHistory) do
     if entry.hp > maxHp then maxHp = entry.hp end
   end
   local currentHp = player:getHealthPercent()
+  if currentHp >= maxHp then return false end
   local drop = maxHp - currentHp
-  return drop >= 60
+  local threshold = storage.esp_anti_burst_drop or 40
+  return drop >= threshold
 end
 
 UI.Separator(fugasContent)
 
+-- =============================================
+-- HELPERS DE PAUSA/RESTAURACAO DE MACROS ESPECIAIS
+-- =============================================
+local function getAllEspMacros()
+  return {
+    { name = "trap",      ref = EspTrapMacro },
+    { name = "combo",     ref = EspComboMacro },
+    { name = "buff",      ref = EspBuffMacro },
+    { name = "ataque",    ref = EspAtaqueMacro },
+    { name = "stack",     ref = EspStackMacro },
+    { name = "retas",     ref = EspRetasMacro },
+    { name = "perseguir", ref = EspPerseguirMacro },
+    { name = "genjutsu",  ref = EspGenjutsuMacro },
+  }
+end
+
+-- Pausa todos os macros especiais, salvando o estado previo. Idempotente.
+local function pausarMacrosEspeciais()
+  local macros = getAllEspMacros()
+  for _, m in ipairs(macros) do
+    if m.ref then
+      -- Evita sobrescrever estado salvo anteriormente (nao perder origem)
+      if espMacrosWereOn[m.name] == nil then
+        espMacrosWereOn[m.name] = m.ref:isOn() or false
+      end
+      if m.ref:isOn() then m.ref.setOff() end
+    end
+  end
+end
+
+-- Restaura apenas os macros que estavam ativos antes da pausa, limpa estado.
+local function restaurarMacrosEspeciais()
+  local macros = getAllEspMacros()
+  for _, m in ipairs(macros) do
+    if m.ref and espMacrosWereOn[m.name] and not m.ref:isOn() then
+      m.ref.setOn()
+    end
+  end
+  espMacrosWereOn = {}
+  fugaActive = false
+end
+
+-- Dispara uma fuga de forma eficiente: pausa especiais, cast com confirmacao,
+-- aplica cooldowns e agenda restauracao ao fim do tempo ativo.
+local function dispararFuga(f)
+  local uid = f.uid
+  local spellText = f.text
+  local cooldownMs   = (tonumber(f.cooldown) or 10) * 1000
+  local activeTimeMs = (tonumber(f.activeTime) or 3) * 1000
+  local maxUses      = tonumber(f.quantidade) or 1
+  local cdQtdMs      = (tonumber(f.cdQuantidade) or 2) * 1000
+
+  if not fugaUsesLeft[uid] then fugaUsesLeft[uid] = maxUses end
+  if not espCheckMacroDelay() then return false end
+
+  fugaActive = true
+  pausarMacrosEspeciais()
+
+  say(spellText)
+  espMarkMacroUsed()
+
+  local function aplicarCooldownsERestaurar()
+    fugaUsesLeft[uid] = (fugaUsesLeft[uid] or maxUses) - 1
+    if fugaUsesLeft[uid] <= 0 then
+      fugaUsesLeft[uid] = maxUses
+      fugaActiveEnd[uid] = now + activeTimeMs
+      fugaCooldownEnd[uid] = now + activeTimeMs + cooldownMs
+    else
+      fugaActiveEnd[uid] = now + activeTimeMs
+      fugaCooldownEnd[uid] = now + cdQtdMs
+    end
+    -- Restaura macros somente ao fim do tempo ativo da fuga
+    schedule(activeTimeMs, function()
+      restaurarMacrosEspeciais()
+    end)
+  end
+
+  -- Confirmacao via spell cooldown: verifica se a fuga realmente foi castada.
+  -- 3 tentativas (150ms cada), depois libera mesmo sem confirmar para nao travar.
+  local attempts = 0
+  local function tryConfirm()
+    attempts = attempts + 1
+    local data = getSpellData(spellText:lower())
+    local confirmed = data and (getSpellCoolDown(spellText:lower()) == true) or false
+    if confirmed or attempts >= 3 then
+      aplicarCooldownsERestaurar()
+    else
+      say(spellText)
+      espMarkMacroUsed()
+      schedule(150, tryConfirm)
+    end
+  end
+  schedule(150, tryConfirm)
+
+  return true
+end
+
 -- Main fuga macro callback (BotSwitch criado no topo da aba)
 _fugaMacroCallback = function()
+  if fugaActive then return end
+  if isInPz() then return end
   local hp = player:getHealthPercent()
 
   -- =============================================
-  -- ANTI-BURST: verifica burst e usa fuga marcada
+  -- ANTI-BURST: prioridade maxima
   -- =============================================
-  if storage.esp_anti_burst and not fugaActive and isBurstDetected() and (now - lastBurstTrigger) > 2000 then
-    -- Busca uma fuga com burst=true que esteja fora de cooldown
-    for i, f in ipairs(storage.esp_fugas_list) do
+  if storage.esp_anti_burst and isBurstDetected() and (now - lastBurstTrigger) > 2000 then
+    for _, f in ipairs(storage.esp_fugas_list) do
       if f.burst and f.text and f.text:len() > 0 and f.enabled ~= false then
         local uid = f.uid
         local cdEnd = fugaCooldownEnd[uid] or 0
         if now >= cdEnd then
-          local cooldownMs  = (tonumber(f.cooldown) or 10) * 1000
-          local activeTimeMs = (tonumber(f.activeTime) or 3) * 1000
-          local maxUses = tonumber(f.quantidade) or 1
-          local cdQtdMs = (tonumber(f.cdQuantidade) or 2) * 1000
-
-          if not fugaUsesLeft[uid] then
-            fugaUsesLeft[uid] = maxUses
+          if dispararFuga(f) then
+            lastBurstTrigger = now
+            hpHistory = {}  -- zera historico para evitar retrigger imediato
           end
-
-          -- Pausa TODOS os macros especiais
-          local allEspMacros = {
-            { name = "trap",      ref = EspTrapMacro },
-            { name = "combo",     ref = EspComboMacro },
-            { name = "buff",      ref = EspBuffMacro },
-            { name = "ataque",    ref = EspAtaqueMacro },
-            { name = "stack",     ref = EspStackMacro },
-            { name = "retas",     ref = EspRetasMacro },
-            { name = "perseguir", ref = EspPerseguirMacro },
-            { name = "genjutsu",  ref = EspGenjutsuMacro },
-          }
-          espMacrosWereOn = {}
-          for _, m in ipairs(allEspMacros) do
-            if m.ref then
-              espMacrosWereOn[m.name] = m.ref:isOn() or false
-              if m.ref:isOn() then m.ref.setOff() end
-            end
-          end
-
-          fugaActive = true
-          lastBurstTrigger = now
-          hpHistory = {}  -- Limpa historico apos trigger
-
-          if not espCheckMacroDelay() then
-            fugaActive = false
-            -- Restaurar macros que foram pausados antes do delay check
-            local restoreMacrosBailout = {
-              { name = "trap",      ref = EspTrapMacro },
-              { name = "combo",     ref = EspComboMacro },
-              { name = "buff",      ref = EspBuffMacro },
-              { name = "ataque",    ref = EspAtaqueMacro },
-              { name = "stack",     ref = EspStackMacro },
-              { name = "retas",     ref = EspRetasMacro },
-              { name = "perseguir", ref = EspPerseguirMacro },
-              { name = "genjutsu",  ref = EspGenjutsuMacro },
-            }
-            for _, m in ipairs(restoreMacrosBailout) do
-              if m.ref and espMacrosWereOn[m.name] and not m.ref:isOn() then
-                m.ref.setOn()
-              end
-            end
-            return
-          end
-          say(f.text)
-          espMarkMacroUsed()
-
-          local function restaurarMacrosBurst()
-            fugaActive = false
-            local restoreMacros = {
-              { name = "trap",      ref = EspTrapMacro },
-              { name = "combo",     ref = EspComboMacro },
-              { name = "buff",      ref = EspBuffMacro },
-              { name = "ataque",    ref = EspAtaqueMacro },
-              { name = "stack",     ref = EspStackMacro },
-              { name = "retas",     ref = EspRetasMacro },
-              { name = "perseguir", ref = EspPerseguirMacro },
-              { name = "genjutsu",  ref = EspGenjutsuMacro },
-            }
-            for _, m in ipairs(restoreMacros) do
-              if m.ref and espMacrosWereOn[m.name] and not m.ref:isOn() then
-                m.ref.setOn()
-              end
-            end
-          end
-
-          fugaUsesLeft[uid] = fugaUsesLeft[uid] - 1
-          if fugaUsesLeft[uid] <= 0 then
-            fugaUsesLeft[uid] = maxUses
-            fugaActiveEnd[uid] = now + activeTimeMs
-            fugaCooldownEnd[uid] = now + activeTimeMs + cooldownMs
-            schedule(activeTimeMs, restaurarMacrosBurst)
-          else
-            fugaActiveEnd[uid] = now + activeTimeMs
-            fugaCooldownEnd[uid] = now + cdQtdMs
-            schedule(activeTimeMs, restaurarMacrosBurst)
-          end
-          return  -- Burst tratado, sair do macro
+          return
         end
       end
     end
   end
 
-  -- Monta lista ordenada por campo ordem
-  local fugaList = {}
+  -- =============================================
+  -- FUGAS POR HP: avalia todas as elegiveis, escolhe pela posicao (menor = prioridade)
+  -- =============================================
+  local eligible = {}
   for i, f in ipairs(storage.esp_fugas_list) do
     if f.text and f.text:len() > 0 and f.enabled ~= false then
-      table.insert(fugaList, { index = i, data = f, uid = f.uid })
+      local hpThreshold = tonumber(f.hp) or 50
+      if hp <= hpThreshold then
+        local uid = f.uid
+        local cdEnd = fugaCooldownEnd[uid] or 0
+        if now >= cdEnd then
+          table.insert(eligible, { position = i, data = f })
+        end
+      end
     end
   end
 
-  table.sort(fugaList, function(a, b)
-    return (tonumber(a.data.order) or a.index) < (tonumber(b.data.order) or b.index)
-  end)
+  if #eligible == 0 then return end
 
-  for _, fuga in ipairs(fugaList) do
-    local i = fuga.index
-    local f = fuga.data
-    local uid = fuga.uid
-
-    local hpThreshold = tonumber(f.hp) or 50
-    local cooldownMs  = (tonumber(f.cooldown) or 10) * 1000
-    local activeTimeMs = (tonumber(f.activeTime) or 3) * 1000
-    local maxUses = tonumber(f.quantidade) or 1
-    local cdQtdMs = (tonumber(f.cdQuantidade) or 2) * 1000
-
-    -- Se o HP ainda nao chegou nessa prioridade, para
-    if hp > hpThreshold then
-      break
-    end
-
-    local cdEnd = fugaCooldownEnd[uid] or 0
-
-    -- Inicializa usos restantes se necessario
-    if not fugaUsesLeft[uid] then
-      fugaUsesLeft[uid] = maxUses
-    end
-
-    if not fugaActive and now >= cdEnd then
-      -- Pausa TODOS os macros especiais (salva estado anterior)
-      local allEspMacros = {
-        { name = "trap",      ref = EspTrapMacro },
-        { name = "combo",     ref = EspComboMacro },
-        { name = "buff",      ref = EspBuffMacro },
-        { name = "ataque",    ref = EspAtaqueMacro },
-        { name = "stack",     ref = EspStackMacro },
-        { name = "retas",     ref = EspRetasMacro },
-        { name = "perseguir", ref = EspPerseguirMacro },
-        { name = "genjutsu",  ref = EspGenjutsuMacro },
-      }
-
-      espMacrosWereOn = {}
-      for _, m in ipairs(allEspMacros) do
-        if m.ref then
-          espMacrosWereOn[m.name] = m.ref:isOn() or false
-          if m.ref:isOn() then m.ref.setOff() end
-        end
-      end
-
-      fugaActive = true
-
-      if not espCheckMacroDelay() then
-        fugaActive = false
-        -- Restaurar macros que foram pausados antes do delay check
-        for _, m in ipairs(allEspMacros) do
-          if m.ref and espMacrosWereOn[m.name] and not m.ref:isOn() then
-            m.ref.setOn()
-          end
-        end
-        return
-      end
-      say(f.text)
-      espMarkMacroUsed()
-
-      -- Funcao para restaurar todos os macros ao estado anterior
-      local function restaurarMacros()
-        fugaActive = false
-        local restoreMacros = {
-          { name = "trap",      ref = EspTrapMacro },
-          { name = "combo",     ref = EspComboMacro },
-          { name = "buff",      ref = EspBuffMacro },
-          { name = "ataque",    ref = EspAtaqueMacro },
-          { name = "stack",     ref = EspStackMacro },
-          { name = "retas",     ref = EspRetasMacro },
-          { name = "perseguir", ref = EspPerseguirMacro },
-          { name = "genjutsu",  ref = EspGenjutsuMacro },
-        }
-        for _, m in ipairs(restoreMacros) do
-          if m.ref and espMacrosWereOn[m.name] and not m.ref:isOn() then
-            m.ref.setOn()
-          end
-        end
-      end
-
-      -- Funcao para aplicar cooldowns e agendar restauracao
-      local function aplicarCooldownsERestaurar()
-        fugaUsesLeft[uid] = fugaUsesLeft[uid] - 1
-
-        if fugaUsesLeft[uid] <= 0 then
-          fugaUsesLeft[uid] = maxUses
-          fugaActiveEnd[uid] = now + activeTimeMs
-          fugaCooldownEnd[uid] = now + activeTimeMs + cooldownMs
-          schedule(activeTimeMs, restaurarMacros)
-        else
-          fugaActiveEnd[uid] = now + activeTimeMs
-          fugaCooldownEnd[uid] = now + cdQtdMs
-          schedule(activeTimeMs, restaurarMacros)
-        end
-      end
-
-      -- Confirmacao via spell cooldown: verifica se a fuga realmente foi castada in-game
-      local spellText = f.text
-      schedule(150, function()
-        local data = getSpellData(spellText:lower())
-        local confirmed = false
-        if data then
-          confirmed = getSpellCoolDown(spellText:lower()) == true
-        end
-
-        if confirmed then
-          -- Fuga confirmada pelo servidor, aplica cooldowns
-          aplicarCooldownsERestaurar()
-        else
-          -- Nao confirmou, retenta a fuga
-          say(spellText)
-          espMarkMacroUsed()
-          -- Segunda confirmacao apos 150ms
-          schedule(150, function()
-            -- Aplica cooldowns independente para nao ficar travado
-            aplicarCooldownsERestaurar()
-          end)
-        end
-      end)
-
-      break
-    end
-  end
+  -- Menor posicao = maior prioridade (ordem de entrada/reordenacao)
+  table.sort(eligible, function(a, b) return a.position < b.position end)
+  dispararFuga(eligible[1].data)
 end
 
 

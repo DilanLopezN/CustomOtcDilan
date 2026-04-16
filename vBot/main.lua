@@ -370,6 +370,8 @@ do
     data.esp_genjutsu_list = deepCopy(storage.esp_genjutsu_list or {})
     -- Anti-Burst
     data.esp_anti_burst = storage.esp_anti_burst or false
+    data.esp_anti_burst_drop = storage.esp_anti_burst_drop or 40
+    data.esp_anti_burst_window = storage.esp_anti_burst_window or 1500
     return data
   end
 
@@ -455,6 +457,8 @@ do
     if data.bgPlayer then storage.bgPlayer = deepCopy(data.bgPlayer) end
     if data.esp_genjutsu_list then storage.esp_genjutsu_list = fixNumericKeys(deepCopy(data.esp_genjutsu_list)) end
     if data.esp_anti_burst ~= nil then storage.esp_anti_burst = data.esp_anti_burst end
+    if data.esp_anti_burst_drop ~= nil then storage.esp_anti_burst_drop = data.esp_anti_burst_drop end
+    if data.esp_anti_burst_window ~= nil then storage.esp_anti_burst_window = data.esp_anti_burst_window end
 
     -- Macro Delay
     if data.esp_macro_delay then

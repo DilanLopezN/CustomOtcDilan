@@ -157,9 +157,13 @@ local function getFugaPosition(uid)
   return nil
 end
 
--- Helper: nome de exibicao baseado na posicao atual + spell
+-- Helper: nome de exibicao baseado no nome customizado (se definido) ou na posicao + spell
 local function getFugaDisplayName(fugaData, position)
   local pos = position or getFugaPosition(fugaData.uid) or "?"
+  local customName = fugaData.name
+  if customName and customName:len() > 0 then
+    return "[" .. pos .. "] " .. customName
+  end
   local spell = fugaData.text
   if spell and spell:len() > 0 then
     return "Fuga " .. pos .. ": " .. spell
@@ -257,7 +261,7 @@ local function createFugaWidget(index, fugaData)
   local uid = fugaData.uid
   local entry = setupUI([[
 Panel
-  height: 250
+  height: 278
   margin-top: 4
   background-color: #0A0A0A55
   border-width: 1
@@ -347,8 +351,25 @@ Panel
     text-auto-resize: true
 
   Label
-    id: lbl1
+    id: lblName
     anchors.top: removeBtn.bottom
+    anchors.left: parent.left
+    margin-top: 3
+    text: Nome (opcional):
+    color: #AADDFF
+    text-auto-resize: true
+
+  TextEdit
+    id: nameEdit
+    anchors.top: lblName.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 22
+    margin-top: 1
+
+  Label
+    id: lbl1
+    anchors.top: nameEdit.bottom
     anchors.left: parent.left
     margin-top: 3
     text: Spell:
@@ -466,6 +487,7 @@ Panel
   ]], fugasContent)
 
   entry.title:setText(getFugaDisplayName(fugaData, index))
+  entry.nameEdit:setText(fugaData.name or "")
   entry.spellEdit:setText(fugaData.text or "")
   entry.row1.hpEdit:setText(tostring(fugaData.hp or 50))
   entry.row2.activeEdit:setText(tostring(fugaData.activeTime or 3))
@@ -474,6 +496,7 @@ Panel
   entry.row6.cdQtdEdit:setText(tostring(fugaData.cdQuantidade or 2))
 
   -- Tooltips explicativos para cada campo
+  entry.nameEdit:setTooltip("Nome identificador desta fuga (unico na tela). Se vazio usa 'Fuga N: spell'.")
   entry.spellEdit:setTooltip("Nome da spell de fuga que sera usada (ex: utani hur)")
   entry.row1.hpEdit:setTooltip("Porcentagem de HP para ativar a fuga (ex: 50 = ativa quando HP <= 50%)")
   entry.row2.activeEdit:setTooltip("Tempo em segundos que a fuga fica ativa apos ser usada")
@@ -482,7 +505,7 @@ Panel
   entry.row6.cdQtdEdit:setTooltip("Cooldown em segundos entre cada uso quando tem multiplas cargas")
 
   -- Estilo: fundo transparente e texto neon azul nos inputs
-  local fugaInputs = {entry.spellEdit, entry.row1.hpEdit, entry.row2.activeEdit, entry.row3.cdEdit, entry.row5.qtdEdit, entry.row6.cdQtdEdit}
+  local fugaInputs = {entry.nameEdit, entry.spellEdit, entry.row1.hpEdit, entry.row2.activeEdit, entry.row3.cdEdit, entry.row5.qtdEdit, entry.row6.cdQtdEdit}
   for _, input in ipairs(fugaInputs) do
     input:setBackgroundColor("#00000033")
     input:setColor("#00DDFF")
@@ -543,6 +566,13 @@ Panel
     return nil, nil
   end
 
+  entry.nameEdit.onTextChange = function(w, text)
+    if fugaRefreshing then return end
+    local i, f = findByUid()
+    if not f then return end
+    f.name = text
+    entry.title:setText(getFugaDisplayName(f, i))
+  end
   entry.spellEdit.onTextChange = function(w, text)
     if fugaRefreshing then return end
     local i, f = findByUid()
@@ -705,6 +735,7 @@ addBtn.addFuga.onClick = function(w)
   local newUid = fugaIdCounter
   fugaIdCounter = fugaIdCounter + 1
   table.insert(storage.esp_fugas_list, {
+    name = "",
     text = "",
     hp = 50,
     activeTime = 3,
@@ -1480,8 +1511,10 @@ local combosContent = espPanel3.scrollArea
 
 -- Macro placeholder (BotSwitch aparece no topo da aba)
 local _comboMacroCallback = nil
-local comboCurrentIndex = 1  -- indice do jutsu atual para execucao sequencial
-EspComboMacro = macro(100, "Combo Especial", function()
+local comboCurrentIndex = 1    -- indice do jutsu atual para execucao sequencial
+local comboLastTargetId = nil  -- id do ultimo alvo para detectar troca
+local comboLastSelected = nil  -- ultimo slot selecionado
+EspComboMacro = macro(50, "Combo Especial", function()
   if _comboMacroCallback then _comboMacroCallback() end
 end, combosContent)
 
@@ -1729,29 +1762,52 @@ end
 updateComboSelect()
 refreshCombos()
 
--- ===== Macro callback: executa UM jutsu por ciclo, avancando sequencialmente =====
+-- ===== Macro callback: executa UM jutsu por ciclo, sincronizado com outros macros =====
 _comboMacroCallback = function()
-  if not g_game.isAttacking() then return end
-  if not espCheckMacroDelay() then return end
+  -- Pausar durante fuga ativa (sincronizacao com sistema de fugas)
+  if fugaActive then return end
+  if isInPz() then return end
+
+  -- Precisa ter alvo atacando; sem alvo, reinicia o combo
+  if not g_game.isAttacking() then
+    comboCurrentIndex = 1
+    comboLastTargetId = nil
+    return
+  end
+
+  -- Resetar indice ao trocar de alvo (novo combo comeca do jutsu 1)
+  local target = g_game.getAttackingCreature()
+  local targetId = target and target:getId() or nil
+  if targetId ~= comboLastTargetId then
+    comboCurrentIndex = 1
+    comboLastTargetId = targetId
+  end
+
+  -- Resetar indice ao trocar de slot selecionado
   local sel = storage.esp_combo_selected
+  if sel ~= comboLastSelected then
+    comboCurrentIndex = 1
+    comboLastSelected = sel
+  end
+
+  -- Respeita o macro delay global (mesmo do resto do sistema)
+  if not espCheckMacroDelay() then return end
+
   local slot = storage.esp_combo_slots[sel]
   if not slot or not slot.jutsus or #slot.jutsus == 0 then return end
 
   local totalJutsus = #slot.jutsus
-  -- Garantir que o indice esta dentro do range
-  if comboCurrentIndex > totalJutsus then
+  if comboCurrentIndex < 1 or comboCurrentIndex > totalJutsus then
     comboCurrentIndex = 1
   end
 
-  -- Encontrar proximo jutsu valido a partir do indice atual
+  -- Encontrar proximo jutsu habilitado (pula desabilitados/vazios)
   local startIndex = comboCurrentIndex
-  local found = false
-  repeat
+  for _ = 1, totalJutsus do
     local jutsu = slot.jutsus[comboCurrentIndex]
     if jutsu and jutsu.text and jutsu.text:len() > 0 and jutsu.enabled ~= false then
       say(jutsu.text)
       espMarkMacroUsed()
-      found = true
       comboCurrentIndex = comboCurrentIndex + 1
       if comboCurrentIndex > totalJutsus then
         comboCurrentIndex = 1
@@ -1762,9 +1818,8 @@ _comboMacroCallback = function()
     if comboCurrentIndex > totalJutsus then
       comboCurrentIndex = 1
     end
-  until comboCurrentIndex == startIndex
-
-  -- Se nenhum jutsu valido foi encontrado, nao faz nada
+    if comboCurrentIndex == startIndex then break end
+  end
 end
 
 -- =============================================
@@ -4191,7 +4246,7 @@ refreshGenjutsus()
 
 
 -- =============================================
--- CLEANUP: destruir todos os widgets de tela ao sair do jogo
+-- CLEANUP: destruir widgets de tela ao sair do jogo
 -- =============================================
 if onGameEnd then
   onGameEnd(function()
@@ -4211,5 +4266,51 @@ if onGameEnd then
       end
     end
   end)
+end
+
+-- =============================================
+-- OCULTAR widgets de tela quando o bot esta desligado
+-- =============================================
+-- Helper global: esconde todos os widgets especiais na tela
+function espHideAllScreenWidgets()
+  for _, sw in pairs(fugaScreenWidgets or {}) do
+    if sw and sw.hide then pcall(function() sw:hide() end) end
+  end
+  local staticWidgets = {espAtkWidget, espStackWidget, espRetasWidget, espPerseguirWidget, espGenjutsuWidget}
+  for _, w in ipairs(staticWidgets) do
+    if w and w.hide then pcall(function() w:hide() end) end
+  end
+end
+
+-- Detecta mudanca do estado do botao "enable" do bot e sincroniza widgets
+local function espIsBotEnabled()
+  local btn = modules.game_bot and modules.game_bot.contentsPanel and modules.game_bot.contentsPanel.enableButton
+  if not btn then return true end
+  if btn.isOn then
+    local ok, val = pcall(function() return btn:isOn() end)
+    if ok then return val and true or false end
+  end
+  if btn.isChecked then
+    local ok, val = pcall(function() return btn:isChecked() end)
+    if ok then return val and true or false end
+  end
+  return true
+end
+
+local _botEnableBtn = modules.game_bot and modules.game_bot.contentsPanel and modules.game_bot.contentsPanel.enableButton
+if _botEnableBtn then
+  connect(_botEnableBtn, {
+    onClick = function(widget)
+      -- Estado pode ter mudado no click; verifica e oculta se estiver off
+      if not espIsBotEnabled() then
+        espHideAllScreenWidgets()
+      end
+    end,
+    onCheckChange = function(widget, checked)
+      if not checked then
+        espHideAllScreenWidgets()
+      end
+    end,
+  })
 end
 

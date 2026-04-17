@@ -332,6 +332,9 @@ do
     storage.esp_macro_delay = 50
     storage.esp_genjutsu_list = {}
     storage.esp_anti_burst = false
+    storage.esp_anti_burst_drop = 40
+    storage.esp_anti_burst_window = 1500
+    storage.visualCustom = {}
   end
 
   -- Funcao para coletar dados do perfil atual
@@ -578,7 +581,7 @@ Panel
     PerfisWindow = g_ui.loadUIFromString([[
 MainWindow
   !text: tr('- Perfis -')
-  size: 350 420
+  size: 350 460
   color: #00DDFF
   @onEscape: self:hide()
 
@@ -668,9 +671,20 @@ MainWindow
       width: 55
       height: 25
 
+  Button
+    id: resetProfileBtn
+    anchors.top: controls.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 28
+    margin-top: 8
+    text: Reset Profile (limpa tudo)
+    color: #FF3333
+    font: verdana-11px-rounded
+
   Label
     id: statusLabel
-    anchors.top: controls.bottom
+    anchors.top: resetProfileBtn.bottom
     anchors.left: parent.left
     anchors.right: parent.right
     text: --
@@ -846,6 +860,140 @@ MainWindow
       updateCharInfo()
       PerfisWindow.statusLabel:setText("Lista atualizada")
       PerfisWindow.statusLabel:setColor("yellow")
+    end
+
+    -- =========================================================
+    -- Reset Profile: modal de confirmacao antes de limpar
+    -- =========================================================
+    local resetConfirmWindow = nil
+    local function showResetConfirmModal()
+      if resetConfirmWindow then
+        pcall(function() resetConfirmWindow:destroy() end)
+        resetConfirmWindow = nil
+      end
+
+      resetConfirmWindow = g_ui.loadUIFromString([[
+MainWindow
+  !text: tr('Confirmar Reset')
+  size: 360 190
+  color: #FF3333
+  @onEscape: self:destroy()
+
+  Label
+    id: msg1
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text-align: center
+    text-auto-resize: true
+    text-wrap: true
+    font: verdana-11px-rounded
+    color: #FFCC00
+    margin-top: 5
+    text: ATENCAO! Esta acao e irreversivel.
+
+  Label
+    id: msg2
+    anchors.top: msg1.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text-align: center
+    text-auto-resize: true
+    text-wrap: true
+    font: verdana-11px-rounded
+    color: white
+    margin-top: 8
+    text: Todos os dados do perfil atual (fugas, traps, combos, buffs, ataques, stacks, retas, perseguir, genjutsus, kai, hotkeys, visuais, background e anti-burst) serao apagados.
+
+  Label
+    id: msg3
+    anchors.top: msg2.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text-align: center
+    text-auto-resize: true
+    font: verdana-11px-rounded
+    color: #AADDFF
+    margin-top: 6
+    text: Deseja continuar?
+
+  Button
+    id: cancelBtn
+    anchors.left: parent.left
+    anchors.bottom: parent.bottom
+    margin-left: 5
+    margin-bottom: 5
+    width: 120
+    height: 25
+    text: Cancelar
+    color: #AAAAAA
+
+  Button
+    id: confirmBtn
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    margin-right: 5
+    margin-bottom: 5
+    width: 120
+    height: 25
+    text: Sim, resetar
+    color: #FF3333
+]], rootWidget)
+
+      resetConfirmWindow:raise()
+      resetConfirmWindow:focus()
+
+      resetConfirmWindow.cancelBtn.onClick = function()
+        resetConfirmWindow:destroy()
+        resetConfirmWindow = nil
+        PerfisWindow.statusLabel:setText("Reset cancelado")
+        PerfisWindow.statusLabel:setColor("#AAAAAA")
+      end
+
+      resetConfirmWindow.confirmBtn.onClick = function()
+        resetConfirmWindow:destroy()
+        resetConfirmWindow = nil
+
+        -- Oculta widgets de tela antes de limpar storages
+        if espHideAllScreenWidgets then
+          pcall(espHideAllScreenWidgets)
+        end
+
+        -- Limpa o storage atual
+        clearProfileStorage()
+
+        -- Regrava o perfil do personagem atual vazio (se logado)
+        if player then
+          local charName = player:getName()
+          if charName and charName:len() > 0 then
+            saveProfile(charName)
+          end
+        end
+
+        -- Recarrega todas as UIs
+        schedule(100, function()
+          if refreshFugas then refreshFugas() end
+          if refreshCombos then refreshCombos() end
+          if refreshBuffs then refreshBuffs() end
+          if refreshTraps then refreshTraps() end
+          if refreshAtaques then refreshAtaques() end
+          if refreshStacks then refreshStacks() end
+          if refreshRetas then refreshRetas() end
+          if refreshPerseguir then refreshPerseguir() end
+          if refreshGenjutsus then refreshGenjutsus() end
+          if clearBG then clearBG() end
+          if refreshBGUI then refreshBGUI() end
+          refreshProfileList()
+          updateCharInfo()
+        end)
+
+        PerfisWindow.statusLabel:setText("Perfil resetado!")
+        PerfisWindow.statusLabel:setColor("#FF3333")
+      end
+    end
+
+    PerfisWindow.resetProfileBtn.onClick = function()
+      showResetConfirmModal()
     end
 
     PerfisWindow.closeButton.onClick = function()

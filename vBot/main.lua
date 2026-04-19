@@ -1206,7 +1206,6 @@ MainWindow
 
     local function makeListPanel(listKey, tagColor)
       local panel = g_ui.createWidget("Panel")
-      panel:setLayout(nil)
 
       local input = g_ui.createWidget("TextEdit", panel)
       input:setId("nameInput")

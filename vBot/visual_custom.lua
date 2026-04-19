@@ -345,6 +345,9 @@ local function applyMainButtonColors()
     if perfisButton then
         perfisButton:setColor(corText)
     end
+    if friendsButton then
+        friendsButton:setColor(corText)
+    end
 end
 
 function applyAllVisuals()

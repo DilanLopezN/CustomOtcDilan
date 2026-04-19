@@ -45,7 +45,8 @@ local luaFiles = {
   "music",
   "background",
   "visual_custom",
-  "follow"
+  "follow",
+  "friends"
 }
 
 for i, file in ipairs(luaFiles) do

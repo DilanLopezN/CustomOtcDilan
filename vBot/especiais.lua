@@ -4388,30 +4388,61 @@ if _botEnableBtn then
       _botLastKnownEnabled = true
     end
   end
-  connect(_botEnableBtn, {
-    onClick = function(widget)
-      -- Esconde imediatamente (macros re-mostrarao se bot continuar ligado)
+  local _onClickHandler = function(widget)
+    -- Esconde imediatamente (macros re-mostrarao se bot continuar ligado)
+    pcall(espHideAllScreenWidgets)
+    -- Agenda re-checks para atualizar o estado conhecido
+    if scheduleEvent then
+      scheduleEvent(afterClickCheck, 50)
+      scheduleEvent(afterClickCheck, 250)
+    elseif schedule then
+      pcall(function() schedule(50, afterClickCheck) end)
+      pcall(function() schedule(250, afterClickCheck) end)
+    else
+      afterClickCheck()
+    end
+  end
+  local _onCheckChangeHandler = function(widget, checked)
+    if not checked then
       pcall(espHideAllScreenWidgets)
-      -- Agenda re-checks para atualizar o estado conhecido
-      if scheduleEvent then
-        scheduleEvent(afterClickCheck, 50)
-        scheduleEvent(afterClickCheck, 250)
-      elseif schedule then
-        pcall(function() schedule(50, afterClickCheck) end)
-        pcall(function() schedule(250, afterClickCheck) end)
-      else
-        afterClickCheck()
+      _botLastKnownEnabled = false
+    else
+      _botLastKnownEnabled = true
+    end
+  end
+
+  -- Usa 'connect' se disponivel (preserva handlers existentes do modulo game_bot);
+  -- caso contrario, faz wrap dos handlers atuais para nao sobrescreve-los.
+  if type(connect) == "function" then
+    local ok, err = pcall(connect, _botEnableBtn, {
+      onClick = _onClickHandler,
+      onCheckChange = _onCheckChangeHandler,
+    })
+    if not ok then
+      -- Fallback em caso de erro em connect
+      local prevClick = _botEnableBtn.onClick
+      _botEnableBtn.onClick = function(widget)
+        if type(prevClick) == "function" then pcall(prevClick, widget) end
+        _onClickHandler(widget)
       end
-    end,
-    onCheckChange = function(widget, checked)
-      if not checked then
-        pcall(espHideAllScreenWidgets)
-        _botLastKnownEnabled = false
-      else
-        _botLastKnownEnabled = true
+      local prevCheck = _botEnableBtn.onCheckChange
+      _botEnableBtn.onCheckChange = function(widget, checked)
+        if type(prevCheck) == "function" then pcall(prevCheck, widget, checked) end
+        _onCheckChangeHandler(widget, checked)
       end
-    end,
-  })
+    end
+  else
+    local prevClick = _botEnableBtn.onClick
+    _botEnableBtn.onClick = function(widget)
+      if type(prevClick) == "function" then pcall(prevClick, widget) end
+      _onClickHandler(widget)
+    end
+    local prevCheck = _botEnableBtn.onCheckChange
+    _botEnableBtn.onCheckChange = function(widget, checked)
+      if type(prevCheck) == "function" then pcall(prevCheck, widget, checked) end
+      _onCheckChangeHandler(widget, checked)
+    end
+  end
 end
 
 -- Ao fim do jogo: para o poll e destroi widgets (ja feito em onGameEnd acima)

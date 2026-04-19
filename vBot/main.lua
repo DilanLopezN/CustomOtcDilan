@@ -1264,14 +1264,25 @@ MainWindow
 
     local function makeRow(name, kind)
       local row = g_ui.createWidget("Panel", listPanel)
-      row:setHeight(22)
+      row:setHeight(24)
       row:setBackgroundColor("alpha")
 
+      local removeBtn = g_ui.createWidget("Button", row)
+      removeBtn:setId("feRemoveBtn")
+      removeBtn:addAnchor(AnchorLeft, "parent", AnchorLeft)
+      removeBtn:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
+      removeBtn:setMarginLeft(4)
+      removeBtn:setWidth(20)
+      removeBtn:setHeight(18)
+      removeBtn:setText("X")
+      removeBtn:setColor("#FF5555")
+
       local badge = g_ui.createWidget("UILabel", row)
-      badge:addAnchor(AnchorLeft, "parent", AnchorLeft)
+      badge:setId("feBadge")
+      badge:addAnchor(AnchorLeft, "feRemoveBtn", AnchorRight)
       badge:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
       badge:setMarginLeft(6)
-      badge:setWidth(18)
+      badge:setWidth(14)
       badge:setHeight(18)
       badge:setFont("verdana-11px-rounded")
       badge:setTextAlign(AlignCenter)
@@ -1283,19 +1294,24 @@ MainWindow
         badge:setColor("#FF4444")
       end
 
-      local nameLbl = g_ui.createWidget("UILabel", row)
-      nameLbl:addAnchor(AnchorLeft, "prev", AnchorRight)
-      nameLbl:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
-      nameLbl:setMarginLeft(6)
-      nameLbl:setFont("verdana-11px-rounded")
-      nameLbl:setColor("white")
-      nameLbl:setText(name)
+      local senseBtn = g_ui.createWidget("Button", row)
+      senseBtn:setId("feSenseBtn")
+      senseBtn:addAnchor(AnchorRight, "parent", AnchorRight)
+      senseBtn:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
+      senseBtn:setMarginRight(6)
+      senseBtn:setWidth(52)
+      senseBtn:setHeight(18)
+      senseBtn:setText("Sense")
+      senseBtn:setColor("#AADDFF")
+      senseBtn:setTooltip("Dar sense automatico nesse nome")
 
       local typeLbl = g_ui.createWidget("UILabel", row)
-      typeLbl:addAnchor(AnchorLeft, "prev", AnchorRight)
+      typeLbl:setId("feTypeLbl")
+      typeLbl:addAnchor(AnchorRight, "feSenseBtn", AnchorLeft)
       typeLbl:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
-      typeLbl:setMarginLeft(6)
+      typeLbl:setMarginRight(6)
       typeLbl:setFont("verdana-11px-rounded")
+      typeLbl:setTextAutoResize(true)
       if kind == "friends" then
         typeLbl:setText("(Friend)")
         typeLbl:setColor("#66CC88")
@@ -1304,14 +1320,22 @@ MainWindow
         typeLbl:setColor("#CC6666")
       end
 
-      local removeBtn = g_ui.createWidget("Button", row)
-      removeBtn:addAnchor(AnchorRight, "parent", AnchorRight)
-      removeBtn:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
-      removeBtn:setMarginRight(6)
-      removeBtn:setWidth(22)
-      removeBtn:setHeight(18)
-      removeBtn:setText("X")
-      removeBtn:setColor("#FF5555")
+      local nameLbl = g_ui.createWidget("UILabel", row)
+      nameLbl:setId("feNameLbl")
+      nameLbl:addAnchor(AnchorLeft, "feBadge", AnchorRight)
+      nameLbl:addAnchor(AnchorRight, "feTypeLbl", AnchorLeft)
+      nameLbl:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
+      nameLbl:setMarginLeft(6)
+      nameLbl:setMarginRight(6)
+      nameLbl:setFont("verdana-11px-rounded")
+      nameLbl:setTextWrap(false)
+      if kind == "friends" then
+        nameLbl:setColor("#00FF66")
+      else
+        nameLbl:setColor("#FF4444")
+      end
+      nameLbl:setText(name)
+
       removeBtn.onClick = function()
         if kind == "friends" then
           feRemoveFriend(name)
@@ -1320,6 +1344,14 @@ MainWindow
         end
         refreshList()
         if feRefreshAllMarks then pcall(feRefreshAllMarks) end
+      end
+
+      senseBtn.onClick = function()
+        if storage and storage.senseNames then
+          storage.senseNames.lastName = name
+          storage.senseNames.targetName = name
+        end
+        say('sense "' .. name)
       end
 
       return row

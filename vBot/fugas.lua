@@ -187,17 +187,38 @@ macro(100, function()
             local cdTime = fugaCooldowns[i] or 0
             local durTime = fugaDurations[i] or 0
             local color
+            local status
 
-            if durTime > 0 and now < durTime then
-                color = "#3AA0FF" -- azul: ativo
-            elseif cdTime > 0 and now < cdTime then
-                color = "#FF4444" -- vermelho: cooldown
+            if i == 5 and fuga.multiUse and fuga.multiUse > 1 then
+                local usesLeft = fuga.multiUse - fuga5Uses
+                if durTime > 0 and now < durTime then
+                    color = "#3AA0FF"
+                    status = math.ceil((durTime - now) / 1000) .. "s [ATIVO]"
+                elseif cdTime > 0 and now < cdTime then
+                    color = "#FF4444"
+                    status = math.ceil((cdTime - now) / 1000) .. "s [CD]"
+                elseif fuga5Uses > 0 and fuga5Uses < fuga.multiUse then
+                    color = "#3AFF7A"
+                    status = usesLeft .. "x [RESTAM]"
+                else
+                    color = "#3AFF7A"
+                    status = "OK [" .. fuga.multiUse .. "x]"
+                end
             else
-                color = "#3AFF7A" -- verde: ok
+                if durTime > 0 and now < durTime then
+                    color = "#3AA0FF"
+                    status = math.ceil((durTime - now) / 1000) .. "s [ATIVO]"
+                elseif cdTime > 0 and now < cdTime then
+                    color = "#FF4444"
+                    status = math.ceil((cdTime - now) / 1000) .. "s [CD]"
+                else
+                    color = "#3AFF7A"
+                    status = "OK"
+                end
             end
 
             lbl = getFugaLabel(i)
-            lbl:setText(fuga.spell)
+            lbl:setText(fuga.spell .. " " .. status)
             lbl:setColor(color)
             lbl:show()
             shown = shown + 1

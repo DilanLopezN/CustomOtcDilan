@@ -103,3 +103,62 @@ end)
 macro(3000, function()
   pcall(feRefreshAllMarks)
 end)
+
+-- =============================================
+-- Filtro Battle: esconde friends e evidencia enemies
+-- =============================================
+schedule(1000, function()
+  if not modules or not modules.game_battle then return end
+  local gb = modules.game_battle
+
+  if type(gb.doCreatureFitFilters) == "function" and not gb._feOriginalFitFilters then
+    gb._feOriginalFitFilters = gb.doCreatureFitFilters
+  end
+
+  gb.doCreatureFitFilters = function(creature)
+    if not creature then return false end
+    if type(creature.isLocalPlayer) == "function" and creature:isLocalPlayer() then
+      return false
+    end
+    if type(creature.getHealthPercent) == "function" and creature:getHealthPercent() <= 0 then
+      return false
+    end
+    if type(creature.isPlayer) == "function" and creature:isPlayer() then
+      local name = creature.getName and creature:getName() or nil
+      if name and isFriendByName(name) then
+        return false
+      end
+    end
+    if gb._feOriginalFitFilters then
+      local ok, res = pcall(gb._feOriginalFitFilters, creature)
+      if ok then return res end
+    end
+    return true
+  end
+end)
+
+-- Evidencia enemies na lista de battle (cor vermelha no label)
+local function highlightBattleEnemies()
+  local root = g_ui.getRootWidget()
+  if not root then return end
+  local panel = root:recursiveGetChildById("battlePanel")
+  if not panel or type(panel.getChildren) ~= "function" then return end
+  for _, btn in ipairs(panel:getChildren()) do
+    local creature = btn.creature
+    if creature and type(creature.isPlayer) == "function" and creature:isPlayer() then
+      local name = type(creature.getName) == "function" and creature:getName() or nil
+      local label = type(btn.getChildById) == "function" and btn:getChildById("label") or nil
+      if name and label then
+        if isEnemyByName(name) then
+          label:setColor("#FF4444")
+        elseif isFriendByName(name) then
+          label:setColor("#00FF66")
+        end
+      end
+    end
+  end
+end
+
+macro(500, function()
+  pcall(highlightBattleEnemies)
+end)

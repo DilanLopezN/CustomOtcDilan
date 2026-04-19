@@ -19,13 +19,16 @@ local fuga5LastUse = 0
 local fugaWidget = setupUI([[
 UIWidget
   background-color: #00000000
+  border-width: 0
   font: verdana-11px-rounded
   opacity: 1.0
-  padding: 5 10
+  padding: 0
   focusable: true
   phantom: false
   draggable: true
-  text-auto-resize: true
+  layout:
+    type: verticalBox
+    fit-children: true
 ]], g_ui.getRootWidget())
 
 fugaWidget:setPosition({x = storage.fugaWidgetPos.x, y = storage.fugaWidgetPos.y})
@@ -45,6 +48,21 @@ fugaWidget.onDragLeave = function(widget)
     storage.fugaWidgetPos.x = widget:getX()
     storage.fugaWidgetPos.y = widget:getY()
     return true
+end
+
+-- Labels reutilizaveis por fuga
+local fugaLabels = {}
+local function getFugaLabel(i)
+    local lbl = fugaLabels[i]
+    if not lbl then
+        lbl = g_ui.createWidget("UILabel", fugaWidget)
+        lbl:setFont("verdana-11px-rounded")
+        lbl:setBackgroundColor("#00000000")
+        lbl:setPhantom(true)
+        lbl:setTextAutoResize(true)
+        fugaLabels[i] = lbl
+    end
+    return lbl
 end
 
 -- Função para verificar se alguma fuga com await está ativa
@@ -161,44 +179,34 @@ end)
 
 -- Atualizar widget de cooldowns
 macro(100, function()
-    local lines = {}
-    
+    local shown = 0
+
     for i, fuga in ipairs(storage.fugaSpells) do
+        local lbl = fugaLabels[i]
         if fuga.spell and fuga.spell ~= "" then
             local cdTime = fugaCooldowns[i] or 0
             local durTime = fugaDurations[i] or 0
-            local name = fuga.spell
-            local awaitMark = fuga.await and " [A]" or ""
-            local status
-            
-            if i == 5 and fuga.multiUse and fuga.multiUse > 1 then
-                local usesLeft = fuga.multiUse - fuga5Uses
-                
-                if durTime > 0 and now < durTime then
-                    status = math.ceil((durTime - now) / 1000) .. "s [ATIVO]"
-                elseif cdTime > 0 and now < cdTime then
-                    status = math.ceil((cdTime - now) / 1000) .. "s [CD]"
-                elseif fuga5Uses > 0 and fuga5Uses < fuga.multiUse then
-                    status = usesLeft .. "x [RESTAM]"
-                else
-                    status = "OK [" .. fuga.multiUse .. "x]"
-                end
+            local color
+
+            if durTime > 0 and now < durTime then
+                color = "#3AA0FF" -- azul: ativo
+            elseif cdTime > 0 and now < cdTime then
+                color = "#FF4444" -- vermelho: cooldown
             else
-                if durTime > 0 and now < durTime then
-                    status = math.ceil((durTime - now) / 1000) .. "s [ATIVO]"
-                elseif cdTime > 0 and now < cdTime then
-                    status = math.ceil((cdTime - now) / 1000) .. "s [CD]"
-                else
-                    status = "OK"
-                end
+                color = "#3AFF7A" -- verde: ok
             end
-            
-            table.insert(lines, name .. awaitMark .. ": " .. status)
+
+            lbl = getFugaLabel(i)
+            lbl:setText(fuga.spell)
+            lbl:setColor(color)
+            lbl:show()
+            shown = shown + 1
+        else
+            if lbl then lbl:hide() end
         end
     end
-    
-    if #lines > 0 then
-        fugaWidget:setText(table.concat(lines, "\n"))
+
+    if shown > 0 then
         fugaWidget:show()
     else
         fugaWidget:hide()

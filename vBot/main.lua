@@ -335,6 +335,7 @@ do
     storage.esp_anti_burst_drop = 40
     storage.esp_anti_burst_window = 1500
     storage.visualCustom = {}
+    storage.friends_enemies = { friends = {}, enemies = {} }
   end
 
   -- Funcao para coletar dados do perfil atual
@@ -375,6 +376,8 @@ do
     data.esp_anti_burst = storage.esp_anti_burst or false
     data.esp_anti_burst_drop = storage.esp_anti_burst_drop or 40
     data.esp_anti_burst_window = storage.esp_anti_burst_window or 1500
+    -- Friends / Enemys
+    data.friends_enemies = deepCopy(storage.friends_enemies or { friends = {}, enemies = {} })
     return data
   end
 
@@ -462,6 +465,19 @@ do
     if data.esp_anti_burst ~= nil then storage.esp_anti_burst = data.esp_anti_burst end
     if data.esp_anti_burst_drop ~= nil then storage.esp_anti_burst_drop = data.esp_anti_burst_drop end
     if data.esp_anti_burst_window ~= nil then storage.esp_anti_burst_window = data.esp_anti_burst_window end
+
+    -- Friends / Enemys
+    if data.friends_enemies and type(data.friends_enemies) == "table" then
+      storage.friends_enemies = deepCopy(data.friends_enemies)
+      if type(storage.friends_enemies.friends) ~= "table" then storage.friends_enemies.friends = {} end
+      if type(storage.friends_enemies.enemies) ~= "table" then storage.friends_enemies.enemies = {} end
+    else
+      storage.friends_enemies = { friends = {}, enemies = {} }
+    end
+    schedule(300, function()
+      if feRefreshAllMarks then pcall(feRefreshAllMarks) end
+      if refreshFriendsList then pcall(refreshFriendsList) end
+    end)
 
     -- Macro Delay
     if data.esp_macro_delay then
@@ -1158,7 +1174,7 @@ Panel
     FriendsWindow = g_ui.loadUIFromString([[
 MainWindow
   !text: tr('- Friends / Enemys -')
-  size: 380 440
+  size: 400 460
   color: #FF66CC
   @onEscape: self:hide()
 
@@ -1175,22 +1191,60 @@ MainWindow
     color: #AADDFF
     margin-top: 2
 
-  TabBar
-    id: feTabBar
+  TextEdit
+    id: nameInput
     anchors.top: infoLabel.bottom
     anchors.left: parent.left
-    anchors.right: parent.right
     margin-top: 8
+    margin-left: 4
     height: 22
+    width: 200
 
-  Panel
-    id: feTabContent
-    anchors.top: feTabBar.bottom
+  Button
+    id: addFriendBtn
+    anchors.top: nameInput.top
+    anchors.left: nameInput.right
+    margin-left: 6
+    height: 22
+    width: 80
+    color: #00FF66
+    text: + Friend
+
+  Button
+    id: addEnemyBtn
+    anchors.top: nameInput.top
+    anchors.left: prev.right
+    margin-left: 6
+    height: 22
+    width: 80
+    color: #FF4444
+    text: + Enemy
+
+  ScrollablePanel
+    id: listPanel
+    anchors.top: nameInput.bottom
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.bottom: closeButton.top
-    margin-top: 2
-    margin-bottom: 8
+    margin-top: 8
+    margin-bottom: 6
+    margin-left: 4
+    margin-right: 4
+    border: 1 #444444
+    background-color: #00000033
+    vertical-scrollbar: listScrollBar
+    layout:
+      type: verticalBox
+      fit-children: true
+
+  VerticalScrollBar
+    id: listScrollBar
+    anchors.top: listPanel.top
+    anchors.bottom: listPanel.bottom
+    anchors.right: parent.right
+    step: 20
+    pixels-scroll: true
+    margin-right: 4
 
   Button
     id: closeButton
@@ -1204,153 +1258,134 @@ MainWindow
 ]], rootW)
     FriendsWindow:hide()
 
-    local function makeListPanel(listKey, tagColor)
-      local panel = g_ui.createWidget("Panel")
+    local listPanel = FriendsWindow.listPanel
+    local input = FriendsWindow.nameInput
+    local refreshList
 
-      local input = g_ui.createWidget("TextEdit", panel)
-      input:setId("nameInput")
-      input:addAnchor(AnchorTop, "parent", AnchorTop)
-      input:addAnchor(AnchorLeft, "parent", AnchorLeft)
-      input:setHeight(22)
-      input:setWidth(230)
-      input:setMarginTop(4)
-      input:setMarginLeft(4)
+    local function makeRow(name, kind)
+      local row = g_ui.createWidget("Panel", listPanel)
+      row:setHeight(22)
+      row:setBackgroundColor("alpha")
 
-      local addBtn = g_ui.createWidget("Button", panel)
-      addBtn:setId("addBtn")
-      addBtn:setText("Adicionar")
-      addBtn:addAnchor(AnchorTop, "parent", AnchorTop)
-      addBtn:addAnchor(AnchorLeft, "nameInput", AnchorRight)
-      addBtn:setMarginTop(4)
-      addBtn:setMarginLeft(6)
-      addBtn:setHeight(22)
-      addBtn:setWidth(90)
-      addBtn:setColor(tagColor)
+      local badge = g_ui.createWidget("UILabel", row)
+      badge:addAnchor(AnchorLeft, "parent", AnchorLeft)
+      badge:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
+      badge:setMarginLeft(6)
+      badge:setWidth(18)
+      badge:setHeight(18)
+      badge:setFont("verdana-11px-rounded")
+      badge:setTextAlign(AlignCenter)
+      if kind == "friends" then
+        badge:setText("F")
+        badge:setColor("#00FF66")
+      else
+        badge:setText("E")
+        badge:setColor("#FF4444")
+      end
 
-      local list = g_ui.createWidget("TextList", panel)
-      list:setId("list")
-      list:addAnchor(AnchorTop, "nameInput", AnchorBottom)
-      list:addAnchor(AnchorLeft, "parent", AnchorLeft)
-      list:addAnchor(AnchorRight, "parent", AnchorRight)
-      list:setMarginTop(6)
-      list:setHeight(260)
-      list:setFocusable(false)
+      local nameLbl = g_ui.createWidget("UILabel", row)
+      nameLbl:addAnchor(AnchorLeft, "prev", AnchorRight)
+      nameLbl:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
+      nameLbl:setMarginLeft(6)
+      nameLbl:setFont("verdana-11px-rounded")
+      nameLbl:setColor("white")
+      nameLbl:setText(name)
 
-      local removeBtn = g_ui.createWidget("Button", panel)
-      removeBtn:setId("removeBtn")
-      removeBtn:setText("Remover selecionado")
-      removeBtn:addAnchor(AnchorTop, "list", AnchorBottom)
-      removeBtn:addAnchor(AnchorLeft, "parent", AnchorLeft)
+      local typeLbl = g_ui.createWidget("UILabel", row)
+      typeLbl:addAnchor(AnchorLeft, "prev", AnchorRight)
+      typeLbl:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
+      typeLbl:setMarginLeft(6)
+      typeLbl:setFont("verdana-11px-rounded")
+      if kind == "friends" then
+        typeLbl:setText("(Friend)")
+        typeLbl:setColor("#66CC88")
+      else
+        typeLbl:setText("(Enemy)")
+        typeLbl:setColor("#CC6666")
+      end
+
+      local removeBtn = g_ui.createWidget("Button", row)
       removeBtn:addAnchor(AnchorRight, "parent", AnchorRight)
-      removeBtn:setMarginTop(6)
-      removeBtn:setHeight(24)
+      removeBtn:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
+      removeBtn:setMarginRight(6)
+      removeBtn:setWidth(22)
+      removeBtn:setHeight(18)
+      removeBtn:setText("X")
       removeBtn:setColor("#FF5555")
-
-      local selectedName = nil
-      local selectedWidget = nil
-
-      local function selectEntry(widget)
-        if selectedWidget then
-          selectedWidget:setBackgroundColor("alpha")
-          selectedWidget:setColor("white")
-        end
-        selectedWidget = widget
-        selectedName = widget:getText()
-        widget:setBackgroundColor("#ffffff33")
-        widget:setColor(tagColor)
-      end
-
-      local function refreshList()
-        list:destroyChildren()
-        selectedName = nil
-        selectedWidget = nil
-        local data = storage.friends_enemies[listKey] or {}
-        if #data == 0 then
-          local empty = g_ui.createWidget("Label", list)
-          empty:setText("(vazio)")
-          empty:setColor("gray")
-          empty:setFont("verdana-11px-rounded")
-          empty:setTextOffset({x = 4, y = 0})
-          return
-        end
-        for _, nm in ipairs(data) do
-          local row = g_ui.createWidget("Label", list)
-          row:setText(nm)
-          row:setFont("verdana-11px-rounded")
-          row:setColor("white")
-          row:setHeight(18)
-          row:setTextOffset({x = 4, y = 0})
-          row.onMouseRelease = function(widget, mousePos, mouseButton)
-            if mouseButton == MouseLeftButton then
-              selectEntry(widget)
-              return true
-            end
-          end
-        end
-      end
-
-      addBtn.onClick = function()
-        local txt = input:getText() or ""
-        local names = string.split(txt, ",")
-        for _, n in ipairs(names) do
-          local nm = n:trim()
-          if nm:len() > 0 then
-            if listKey == "friends" then
-              feAddFriend(nm)
-            else
-              feAddEnemy(nm)
-            end
-          end
-        end
-        input:setText("")
-        refreshList()
-        if feRefreshAllMarks then pcall(feRefreshAllMarks) end
-      end
-
-      input.onKeyPress = function(widget, keyCode, keyboardModifiers)
-        if keyCode == 5 then
-          addBtn.onClick()
-          return true
-        end
-        return false
-      end
-
       removeBtn.onClick = function()
-        if not selectedName or selectedName:len() == 0 then return end
-        if listKey == "friends" then
-          feRemoveFriend(selectedName)
+        if kind == "friends" then
+          feRemoveFriend(name)
         else
-          feRemoveEnemy(selectedName)
+          feRemoveEnemy(name)
         end
         refreshList()
         if feRefreshAllMarks then pcall(feRefreshAllMarks) end
       end
 
-      refreshList()
-      panel.refresh = refreshList
-      return panel
+      return row
     end
 
-    local TabBar = FriendsWindow.feTabBar
-    TabBar:setContentWidget(FriendsWindow.feTabContent)
+    refreshList = function()
+      listPanel:destroyChildren()
+      local friends = storage.friends_enemies.friends or {}
+      local enemies = storage.friends_enemies.enemies or {}
+      if #friends == 0 and #enemies == 0 then
+        local empty = g_ui.createWidget("UILabel", listPanel)
+        empty:setText("(lista vazia)")
+        empty:setColor("gray")
+        empty:setFont("verdana-11px-rounded")
+        empty:setTextAlign(AlignCenter)
+        empty:setHeight(24)
+        return
+      end
+      for _, nm in ipairs(friends) do makeRow(nm, "friends") end
+      for _, nm in ipairs(enemies) do makeRow(nm, "enemies") end
+    end
 
-    local friendsPanel = makeListPanel("friends", "#00FF66")
-    local enemiesPanel = makeListPanel("enemies", "#FF4444")
+    local function addNames(kind)
+      local txt = input:getText() or ""
+      local names = string.split(txt, ",")
+      for _, n in ipairs(names) do
+        local nm = n:trim()
+        if nm:len() > 0 then
+          if kind == "friends" then
+            feRemoveEnemy(nm)
+            feAddFriend(nm)
+          else
+            feRemoveFriend(nm)
+            feAddEnemy(nm)
+          end
+        end
+      end
+      input:setText("")
+      refreshList()
+      if feRefreshAllMarks then pcall(feRefreshAllMarks) end
+    end
 
-    TabBar:addTab("Friends", friendsPanel)
-    TabBar:addTab("Enemys", enemiesPanel)
+    FriendsWindow.addFriendBtn.onClick = function() addNames("friends") end
+    FriendsWindow.addEnemyBtn.onClick = function() addNames("enemies") end
+
+    input.onKeyPress = function(widget, keyCode, keyboardModifiers)
+      if keyCode == 5 then
+        addNames("friends")
+        return true
+      end
+      return false
+    end
 
     FriendsWindow.closeButton.onClick = function()
       FriendsWindow:hide()
     end
 
     friendsUI.editFriends.onClick = function()
-      if friendsPanel.refresh then friendsPanel.refresh() end
-      if enemiesPanel.refresh then enemiesPanel.refresh() end
+      refreshList()
       FriendsWindow:show()
       FriendsWindow:raise()
       FriendsWindow:focus()
     end
+
+    refreshFriendsList = refreshList
+    refreshList()
   end
 end
 

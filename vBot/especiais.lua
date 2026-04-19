@@ -157,17 +157,17 @@ local function getFugaPosition(uid)
   return nil
 end
 
--- Helper: nome de exibicao baseado no nome customizado (se definido) ou na posicao + spell
+-- Helper: nome de exibicao baseado no nome customizado (se definido) ou no spell
 local function getFugaDisplayName(fugaData, position)
-  local pos = position or getFugaPosition(fugaData.uid) or "?"
   local customName = fugaData.name
   if customName and customName:len() > 0 then
-    return "[" .. pos .. "] " .. customName
+    return customName
   end
   local spell = fugaData.text
   if spell and spell:len() > 0 then
-    return "Fuga " .. pos .. ": " .. spell
+    return spell
   end
+  local pos = position or getFugaPosition(fugaData.uid) or "?"
   return "Fuga " .. pos
 end
 
@@ -184,40 +184,36 @@ local function createFugaScreenWidget(uid, fugaData, displayIndex)
 
   local screenWidget = g_ui.loadUIFromString([[
 UIWidget
-  background-color: #00000099
+  background-color: alpha
   opacity: 1.0
-  height: 22
+  height: 20
   width: 220
   focusable: true
   phantom: false
   draggable: true
-  border-width: 1
-  border-color: #00AACC
 
   Label
     id: nameText
     anchors.left: parent.left
-    anchors.top: parent.top
-    anchors.bottom: parent.bottom
-    width: 120
-    text-align: left
+    anchors.right: parent.horizontalCenter
+    anchors.verticalCenter: parent.verticalCenter
+    margin-right: 4
+    text-align: right
     font: verdana-11px-rounded
     color: #FFD700
     text: Fuga
-    padding: 2
     text-auto-resize: false
 
   Label
     id: statusText
-    anchors.left: nameText.right
+    anchors.left: parent.horizontalCenter
     anchors.right: parent.right
-    anchors.top: parent.top
-    anchors.bottom: parent.bottom
-    text-align: right
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 4
+    text-align: left
     font: verdana-11px-rounded
     color: #00FF88
-    text: OK
-    padding: 2
+    text: | OK
     text-auto-resize: false
 ]], g_ui.getRootWidget())
 
@@ -250,7 +246,7 @@ UIWidget
   end
 
   screenWidget.nameText:setText(getFugaDisplayName(fugaData, displayIndex))
-  screenWidget.statusText:setText("OK")
+  screenWidget.statusText:setText("| OK")
 
   -- Sempre visivel quando criado (so e criado se checkbox ativo)
   screenWidget:show()
@@ -822,11 +818,11 @@ macro(200, function()
         if qtd > 1 and usesRemaining then
           usesInfo = " [" .. usesRemaining .. "x]"
         end
-        sw.statusText:setText("ATIVA " .. remaining .. "s" .. usesInfo)
+        sw.statusText:setText("| ATIVA " .. remaining .. "s" .. usesInfo)
         sw.statusText:setColor("#FFFF00")
       elseif cdEnd > 0 and now < cdEnd then
         local remaining = math.ceil((cdEnd - now) / 1000)
-        sw.statusText:setText("CD " .. remaining .. "s")
+        sw.statusText:setText("| CD " .. remaining .. "s")
         sw.statusText:setColor("#FF6666")
       else
         local usesInfo = ""
@@ -834,7 +830,7 @@ macro(200, function()
           local left = usesRemaining or qtd
           usesInfo = " [" .. left .. "x]"
         end
-        sw.statusText:setText("OK" .. usesInfo)
+        sw.statusText:setText("| OK" .. usesInfo)
         sw.statusText:setColor("#00FF88")
       end
     elseif sw and not fugaData then

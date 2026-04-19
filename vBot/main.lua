@@ -496,6 +496,9 @@ do
       if refreshBGUI then refreshBGUI() end
     end)
 
+    -- Reseta estado de runtime do combo ao trocar de perfil
+    if espResetComboRuntime then pcall(espResetComboRuntime) end
+
     -- Recarregar UI das fugas/combos/buffs/traps/ataques
     schedule(200, function()
       if refreshFugas then refreshFugas() end
@@ -959,6 +962,11 @@ MainWindow
           pcall(espHideAllScreenWidgets)
         end
 
+        -- Reseta estado de runtime do combo para nao deixar indice "preso"
+        if espResetComboRuntime then
+          pcall(espResetComboRuntime)
+        end
+
         -- Limpa o storage atual
         clearProfileStorage()
 
@@ -985,6 +993,10 @@ MainWindow
           if refreshBGUI then refreshBGUI() end
           refreshProfileList()
           updateCharInfo()
+          -- Garante que widgets de tela sumam apos o refresh tambem
+          if espHideAllScreenWidgets then
+            pcall(espHideAllScreenWidgets)
+          end
         end)
 
         PerfisWindow.statusLabel:setText("Perfil resetado!")

@@ -172,6 +172,7 @@ local function getFugaDisplayName(fugaData, position)
 end
 
 -- Funcao para criar widget na tela de uma fuga
+-- Split em dois labels (nome + status) para impedir mistura de textos
 local function createFugaScreenWidget(uid, fugaData, displayIndex)
   if not fugaData then return end
 
@@ -183,10 +184,10 @@ local function createFugaScreenWidget(uid, fugaData, displayIndex)
 
   local screenWidget = g_ui.loadUIFromString([[
 UIWidget
-  background-color: #00000055
+  background-color: #00000099
   opacity: 1.0
   height: 22
-  width: 200
+  width: 220
   focusable: true
   phantom: false
   draggable: true
@@ -194,9 +195,25 @@ UIWidget
   border-color: #00AACC
 
   Label
+    id: nameText
+    anchors.left: parent.left
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    width: 120
+    text-align: left
+    font: verdana-11px-rounded
+    color: #FFD700
+    text: Fuga
+    padding: 2
+    text-auto-resize: false
+
+  Label
     id: statusText
-    anchors.fill: parent
-    text-align: center
+    anchors.left: nameText.right
+    anchors.right: parent.right
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    text-align: right
     font: verdana-11px-rounded
     color: #00FF88
     text: OK
@@ -232,12 +249,15 @@ UIWidget
     return true
   end
 
-  screenWidget.statusText:setText(getFugaDisplayName(fugaData, displayIndex) .. " | OK")
+  screenWidget.nameText:setText(getFugaDisplayName(fugaData, displayIndex))
+  screenWidget.statusText:setText("OK")
 
   -- Sempre visivel quando criado (so e criado se checkbox ativo)
   screenWidget:show()
 
   screenWidget:setId("fugaScreenWidget_" .. uid)
+  -- Guarda o uid diretamente no widget para evitar qualquer mistura
+  screenWidget.fugaUid = uid
   fugaScreenWidgets[uid] = screenWidget
   return screenWidget
 end
@@ -773,11 +793,13 @@ macro(200, function()
   end
 
   for uid, sw in pairs(fugaScreenWidgets) do
-    -- Encontrar fuga data pelo uid
+    -- Usa uid guardado no widget (mais seguro contra mistura em reordenacoes)
+    local widgetUid = sw and sw.fugaUid or uid
+    -- Encontrar fuga data pelo uid guardado no widget
     local fugaData = nil
     local fugaIndex = nil
     for i, f in ipairs(storage.esp_fugas_list) do
-      if f.uid == uid then
+      if f.uid == widgetUid then
         fugaData = f
         fugaIndex = i
         break
@@ -786,10 +808,13 @@ macro(200, function()
 
     if sw and fugaData then
       local label = getFugaDisplayName(fugaData, fugaIndex)
-      local activeEnd = fugaActiveEnd[uid] or 0
-      local cdEnd = fugaCooldownEnd[uid] or 0
+      local activeEnd = fugaActiveEnd[widgetUid] or 0
+      local cdEnd = fugaCooldownEnd[widgetUid] or 0
       local qtd = tonumber(fugaData.quantidade) or 1
-      local usesRemaining = fugaUsesLeft[uid]
+      local usesRemaining = fugaUsesLeft[widgetUid]
+
+      -- Nome sempre atualizado (impede "mistura" visual apos reorder/rename)
+      sw.nameText:setText(label)
 
       if activeEnd > 0 and now < activeEnd then
         local remaining = math.ceil((activeEnd - now) / 1000)
@@ -797,11 +822,11 @@ macro(200, function()
         if qtd > 1 and usesRemaining then
           usesInfo = " [" .. usesRemaining .. "x]"
         end
-        sw.statusText:setText(label .. " | ATIVA " .. remaining .. "s" .. usesInfo)
+        sw.statusText:setText("ATIVA " .. remaining .. "s" .. usesInfo)
         sw.statusText:setColor("#FFFF00")
       elseif cdEnd > 0 and now < cdEnd then
         local remaining = math.ceil((cdEnd - now) / 1000)
-        sw.statusText:setText(label .. " | CD " .. remaining .. "s")
+        sw.statusText:setText("CD " .. remaining .. "s")
         sw.statusText:setColor("#FF6666")
       else
         local usesInfo = ""
@@ -809,9 +834,12 @@ macro(200, function()
           local left = usesRemaining or qtd
           usesInfo = " [" .. left .. "x]"
         end
-        sw.statusText:setText(label .. " | OK" .. usesInfo)
+        sw.statusText:setText("OK" .. usesInfo)
         sw.statusText:setColor("#00FF88")
       end
+    elseif sw and not fugaData then
+      -- Widget orfao: fuga nao existe mais, esconde para nao ficar mostrando dado errado
+      sw:hide()
     end
   end
 end)
@@ -1511,10 +1539,22 @@ local combosContent = espPanel3.scrollArea
 
 -- Macro placeholder (BotSwitch aparece no topo da aba)
 local _comboMacroCallback = nil
-local comboCurrentIndex = 1    -- indice do jutsu atual para execucao sequencial
-local comboLastTargetId = nil  -- id do ultimo alvo para detectar troca
-local comboLastSelected = nil  -- ultimo slot selecionado
-EspComboMacro = macro(50, "Combo Especial", function()
+local comboCurrentIndex = 1      -- indice do jutsu atual para execucao sequencial
+local comboLastTargetId = nil    -- id do ultimo alvo para detectar troca
+local comboLastSelected = nil    -- ultimo slot selecionado
+local comboLastCastTime = 0      -- timestamp do ultimo cast (ritmo interno do combo)
+local COMBO_MIN_INTERVAL_MS = 80 -- intervalo minimo entre jutsus do mesmo combo (fluidez)
+
+-- Reset global do estado em tempo de execucao do combo (usado no reset de perfil)
+function espResetComboRuntime()
+  comboCurrentIndex = 1
+  comboLastTargetId = nil
+  comboLastSelected = nil
+  comboLastCastTime = 0
+end
+
+-- Tick rapido para maior fluidez; o ritmo real e controlado por COMBO_MIN_INTERVAL_MS
+EspComboMacro = macro(30, "Combo Especial", function()
   if _comboMacroCallback then _comboMacroCallback() end
 end, combosContent)
 
@@ -1762,10 +1802,16 @@ end
 updateComboSelect()
 refreshCombos()
 
--- ===== Macro callback: executa UM jutsu por ciclo, sincronizado com outros macros =====
+-- ===== Macro callback: fluido e sincronizado =====
+-- Fluidez: ritmo interno proprio (COMBO_MIN_INTERVAL_MS) independente do macro delay global,
+-- permitindo sequencia rapida e consistente de jutsus.
+-- Sincronizacao: pausa durante fuga ativa; reinicia ao trocar alvo/slot; respeita PZ.
 _comboMacroCallback = function()
   -- Pausar durante fuga ativa (sincronizacao com sistema de fugas)
-  if fugaActive then return end
+  if fugaActive then
+    -- Ao sair da fuga, combo reinicia do jutsu 1 naturalmente porque o alvo pode ter mudado
+    return
+  end
   if isInPz() then return end
 
   -- Precisa ter alvo atacando; sem alvo, reinicia o combo
@@ -1781,6 +1827,7 @@ _comboMacroCallback = function()
   if targetId ~= comboLastTargetId then
     comboCurrentIndex = 1
     comboLastTargetId = targetId
+    comboLastCastTime = 0  -- permite cast imediato no novo alvo
   end
 
   -- Resetar indice ao trocar de slot selecionado
@@ -1788,10 +1835,11 @@ _comboMacroCallback = function()
   if sel ~= comboLastSelected then
     comboCurrentIndex = 1
     comboLastSelected = sel
+    comboLastCastTime = 0
   end
 
-  -- Respeita o macro delay global (mesmo do resto do sistema)
-  if not espCheckMacroDelay() then return end
+  -- Ritmo interno do combo (fluidez): evita spam no servidor mas mantem o fluxo rapido.
+  if now < comboLastCastTime + COMBO_MIN_INTERVAL_MS then return end
 
   local slot = storage.esp_combo_slots[sel]
   if not slot or not slot.jutsus or #slot.jutsus == 0 then return end
@@ -1807,7 +1855,9 @@ _comboMacroCallback = function()
     local jutsu = slot.jutsus[comboCurrentIndex]
     if jutsu and jutsu.text and jutsu.text:len() > 0 and jutsu.enabled ~= false then
       say(jutsu.text)
+      -- Marca tambem o macro delay global para sincronizar com outros sistemas
       espMarkMacroUsed()
+      comboLastCastTime = now
       comboCurrentIndex = comboCurrentIndex + 1
       if comboCurrentIndex > totalJutsus then
         comboCurrentIndex = 1
@@ -4282,7 +4332,7 @@ function espHideAllScreenWidgets()
   end
 end
 
--- Detecta mudanca do estado do botao "enable" do bot e sincroniza widgets
+-- Le o estado atual do botao "enable" do bot (pos-click ja refletido)
 local function espIsBotEnabled()
   local btn = modules.game_bot and modules.game_bot.contentsPanel and modules.game_bot.contentsPanel.enableButton
   if not btn then return true end
@@ -4297,20 +4347,77 @@ local function espIsBotEnabled()
   return true
 end
 
+-- Poll do estado do bot: detecta qualquer mudanca on->off e esconde os widgets.
+-- Usa scheduleEvent (engine-level) para continuar rodando mesmo com o bot desligado.
+local _botLastKnownEnabled = true  -- assume on no load (script so roda se bot ligado)
+local _botPollActive = true
+
+local function espBotStatePoll()
+  if not _botPollActive then return end
+  local enabled = espIsBotEnabled()
+  if _botLastKnownEnabled and not enabled then
+    -- Transicao on -> off: esconde tudo
+    pcall(espHideAllScreenWidgets)
+  end
+  _botLastKnownEnabled = enabled
+  -- Re-agenda. scheduleEvent e independente do bot estar ativo.
+  if scheduleEvent then
+    scheduleEvent(espBotStatePoll, 300)
+  elseif schedule then
+    schedule(300, espBotStatePoll)
+  end
+end
+
+-- Inicia o poll
+if scheduleEvent then
+  scheduleEvent(espBotStatePoll, 500)
+elseif schedule then
+  schedule(500, espBotStatePoll)
+end
+
+-- Listener direto no botao (backup): tenta esconder logo apos o click.
+-- Estrategia: esconde SEMPRE no click; se o bot continuar ligado, os macros
+-- re-mostram os widgets no proximo tick. Se desligou, ficam escondidos.
 local _botEnableBtn = modules.game_bot and modules.game_bot.contentsPanel and modules.game_bot.contentsPanel.enableButton
 if _botEnableBtn then
+  local function afterClickCheck()
+    if not espIsBotEnabled() then
+      pcall(espHideAllScreenWidgets)
+      _botLastKnownEnabled = false
+    else
+      _botLastKnownEnabled = true
+    end
+  end
   connect(_botEnableBtn, {
     onClick = function(widget)
-      -- Estado pode ter mudado no click; verifica e oculta se estiver off
-      if not espIsBotEnabled() then
-        espHideAllScreenWidgets()
+      -- Esconde imediatamente (macros re-mostrarao se bot continuar ligado)
+      pcall(espHideAllScreenWidgets)
+      -- Agenda re-checks para atualizar o estado conhecido
+      if scheduleEvent then
+        scheduleEvent(afterClickCheck, 50)
+        scheduleEvent(afterClickCheck, 250)
+      elseif schedule then
+        pcall(function() schedule(50, afterClickCheck) end)
+        pcall(function() schedule(250, afterClickCheck) end)
+      else
+        afterClickCheck()
       end
     end,
     onCheckChange = function(widget, checked)
       if not checked then
-        espHideAllScreenWidgets()
+        pcall(espHideAllScreenWidgets)
+        _botLastKnownEnabled = false
+      else
+        _botLastKnownEnabled = true
       end
     end,
   })
+end
+
+-- Ao fim do jogo: para o poll e destroi widgets (ja feito em onGameEnd acima)
+if onGameEnd then
+  onGameEnd(function()
+    _botPollActive = false
+  end)
 end
 

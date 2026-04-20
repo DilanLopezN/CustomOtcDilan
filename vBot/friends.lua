@@ -72,6 +72,8 @@ local function applyMarkAndOutline(creature)
     pcall(function() creature:setMarked("#00FF66") end)
   elseif isEnemyByName(name) then
     pcall(function() creature:setMarked("#FF4444") end)
+  else
+    pcall(function() creature:setMarked("") end)
   end
 end
 
@@ -145,15 +147,16 @@ local function highlightBattleEnemies()
   if not panel or type(panel.getChildren) ~= "function" then return end
   for _, btn in ipairs(panel:getChildren()) do
     local creature = btn.creature
-    if creature and type(creature.isPlayer) == "function" and creature:isPlayer() then
-      local name = type(creature.getName) == "function" and creature:getName() or nil
-      local label = type(btn.getChildById) == "function" and btn:getChildById("label") or nil
-      if name and label then
-        if isEnemyByName(name) then
-          label:setColor("#FF4444")
-        elseif isFriendByName(name) then
-          label:setColor("#00FF66")
-        end
+    local label = type(btn.getChildById) == "function" and btn:getChildById("label") or nil
+    if creature and label then
+      local isPlayer = type(creature.isPlayer) == "function" and creature:isPlayer()
+      local name = isPlayer and type(creature.getName) == "function" and creature:getName() or nil
+      if name and isEnemyByName(name) then
+        label:setColor("#FF4444")
+      elseif name and isFriendByName(name) then
+        label:setColor("#00FF66")
+      else
+        label:setColor("#FFFFFF")
       end
     end
   end

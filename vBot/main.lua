@@ -1224,12 +1224,11 @@ MainWindow
     id: listPanel
     anchors.top: nameInput.bottom
     anchors.left: parent.left
-    anchors.right: parent.right
+    anchors.right: listScrollBar.left
     anchors.bottom: closeButton.top
     margin-top: 8
     margin-bottom: 6
     margin-left: 4
-    margin-right: 4
     border: 1 #444444
     background-color: #00000033
     vertical-scrollbar: listScrollBar

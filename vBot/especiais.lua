@@ -197,7 +197,7 @@ UIWidget
     anchors.left: parent.left
     anchors.right: parent.horizontalCenter
     anchors.verticalCenter: parent.verticalCenter
-    margin-right: 4
+    margin-right: 1
     text-align: right
     font: verdana-11px-rounded
     color: #00FF88
@@ -209,7 +209,7 @@ UIWidget
     anchors.left: parent.horizontalCenter
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
-    margin-left: 4
+    margin-left: 1
     text-align: left
     font: verdana-11px-rounded
     color: #00FF88
@@ -280,8 +280,7 @@ Panel
   height: 278
   margin-top: 4
   background-color: #0A0A0A55
-  border-width: 1
-  border-color: #00AACC
+  border-width: 0
   padding: 4
 
   Label
@@ -899,8 +898,7 @@ local antiBurstPanel = setupUI([[
 Panel
   height: 72
   background-color: #1A050555
-  border-width: 1
-  border-color: #FF4444
+  border-width: 0
   padding: 4
 
   CheckBox

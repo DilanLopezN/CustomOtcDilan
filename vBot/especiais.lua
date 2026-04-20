@@ -200,7 +200,7 @@ UIWidget
     margin-right: 4
     text-align: right
     font: verdana-11px-rounded
-    color: #FFD700
+    color: #00FF88
     text: Fuga
     text-auto-resize: false
 

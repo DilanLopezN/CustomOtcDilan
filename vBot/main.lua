@@ -1266,6 +1266,8 @@ MainWindow
       local row = g_ui.createWidget("Panel", listPanel)
       row:setHeight(24)
       row:setBackgroundColor("alpha")
+      row:addAnchor(AnchorLeft, "parent", AnchorLeft)
+      row:addAnchor(AnchorRight, "parent", AnchorRight)
 
       local removeBtn = g_ui.createWidget("Button", row)
       removeBtn:setId("feRemoveBtn")

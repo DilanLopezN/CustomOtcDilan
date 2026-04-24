@@ -34,6 +34,7 @@ function saveEspeciaisProfile()
       data.esp_trap_list = deepCopyJson(storage.esp_trap_list or {})
       data.esp_combo_slots = deepCopyJson(storage.esp_combo_slots or {})
       data.esp_combo_selected = storage.esp_combo_selected or 1
+      data.esp_combo_enabled = storage.esp_combo_enabled ~= false
       data.esp_buffs_list = deepCopyJson(storage.esp_buffs_list or {})
       data.esp_ataque_list = deepCopyJson(storage.esp_ataque_list or {})
       data.esp_stack_list = deepCopyJson(storage.esp_stack_list or {})
@@ -1535,7 +1536,7 @@ local combosContent = espPanel3.scrollArea
 local _comboMacroCallback = nil
 local comboLastTargetId = nil    -- id do ultimo alvo para detectar troca
 local comboLastSelected = nil    -- ultimo slot selecionado
-local COMBO_CAST_GAP_MS = 25     -- gap entre jutsus da mesma rajada (mantem ordem sem travar)
+local comboNextJutsuIndex = 1
 local COMBO_ATTEMPT_INTERVAL_MS = 80
 local comboLastAttemptTime = 0
 local comboSpellCooldownUntil = {} -- [spellLower] = timestamp local para evitar recast antes do client atualizar CD
@@ -1544,6 +1545,7 @@ local comboSpellCooldownUntil = {} -- [spellLower] = timestamp local para evitar
 function espResetComboRuntime()
   comboLastTargetId = nil
   comboLastSelected = nil
+  comboNextJutsuIndex = 1
   comboLastAttemptTime = 0
   comboSpellCooldownUntil = {}
 end
@@ -1579,6 +1581,9 @@ end
 if type(storage.esp_combo_selected) ~= "number" or storage.esp_combo_selected < 1 or storage.esp_combo_selected > 5 then
   storage.esp_combo_selected = 1
 end
+if storage.esp_combo_enabled == nil then
+  storage.esp_combo_enabled = true
+end
 
 local comboRefreshing = false
 local comboWidgets = {}
@@ -1586,7 +1591,7 @@ local comboWidgets = {}
 -- ===== Header: "Selecionar Combo" com ComboBox dropdown =====
 local comboSelectPanel = setupUI([[
 Panel
-  height: 26
+  height: 28
   margin-top: 3
   Label
     id: headerLabel
@@ -1599,13 +1604,31 @@ Panel
   ComboBox
     id: comboSelect
     anchors.left: headerLabel.right
-    anchors.right: parent.right
+    anchors.right: comboToggle.left
     anchors.verticalCenter: parent.verticalCenter
     margin-left: 8
+    margin-right: 6
     height: 20
+  Button
+    id: comboToggle
+    anchors.right: parent.right
+    anchors.verticalCenter: parent.verticalCenter
+    width: 72
+    height: 20
+    text: COMBO ON
 ]], combosContent)
 
 local comboSelectSyncing = false
+local function updateComboToggleButton()
+  if not comboSelectPanel or not comboSelectPanel.comboToggle then return end
+  if storage.esp_combo_enabled then
+    comboSelectPanel.comboToggle:setText("COMBO ON")
+    comboSelectPanel.comboToggle:setColor("#00CC66")
+  else
+    comboSelectPanel.comboToggle:setText("COMBO OFF")
+    comboSelectPanel.comboToggle:setColor("#FF5555")
+  end
+end
 
 local function updateComboSelect()
   comboSelectSyncing = true
@@ -1618,6 +1641,7 @@ local function updateComboSelect()
   end
   local sel = storage.esp_combo_selected
   comboSelectPanel.comboSelect:setCurrentIndex(sel)
+  updateComboToggleButton()
   comboSelectSyncing = false
 end
 
@@ -1626,9 +1650,15 @@ comboSelectPanel.comboSelect.onOptionChange = function(widget)
   local text = widget:getCurrentOption().text
   local idx = tonumber(text:match("^(%d+)%.")) or 1
   storage.esp_combo_selected = idx
+  comboNextJutsuIndex = 1
   comboLastAttemptTime = 0
   comboSpellCooldownUntil = {}
   refreshCombos()
+end
+
+comboSelectPanel.comboToggle.onClick = function()
+  storage.esp_combo_enabled = not storage.esp_combo_enabled
+  updateComboToggleButton()
 end
 
 UI.Separator(combosContent)
@@ -1829,6 +1859,7 @@ end
 -- Tenta disparar TODOS os jutsus prontos em uma unica passada, preservando a ordem da lista.
 -- Cooldown e auto-detectado por getSpellCoolDown + fallback local por spell.
 _comboMacroCallback = function()
+  if storage.esp_combo_enabled == false then return end
   if fugaActive then
     return
   end
@@ -1836,6 +1867,7 @@ _comboMacroCallback = function()
 
   if not g_game.isAttacking() then
     comboLastTargetId = nil
+    comboNextJutsuIndex = 1
     return
   end
 
@@ -1843,37 +1875,44 @@ _comboMacroCallback = function()
   local targetId = target and target:getId() or nil
   if targetId ~= comboLastTargetId then
     comboLastTargetId = targetId
+    comboNextJutsuIndex = 1
     comboLastAttemptTime = 0
   end
 
   local sel = storage.esp_combo_selected
   if sel ~= comboLastSelected then
     comboLastSelected = sel
+    comboNextJutsuIndex = 1
     comboLastAttemptTime = 0
     comboSpellCooldownUntil = {}
   end
 
-  if now < comboLastAttemptTime + COMBO_ATTEMPT_INTERVAL_MS then return end
+  local comboStepMs = math.max(COMBO_ATTEMPT_INTERVAL_MS, storage.esp_macro_delay or 50)
+  if now < comboLastAttemptTime + comboStepMs then return end
   comboLastAttemptTime = now
 
   local slot = storage.esp_combo_slots[sel]
   if not slot or not slot.jutsus or #slot.jutsus == 0 then return end
 
-  local castOffset = 0
-  for _, jutsu in ipairs(slot.jutsus) do
+  local total = #slot.jutsus
+  if comboNextJutsuIndex < 1 or comboNextJutsuIndex > total then
+    comboNextJutsuIndex = 1
+  end
+
+  for offset = 0, total - 1 do
+    local idx = ((comboNextJutsuIndex + offset - 1) % total) + 1
+    local jutsu = slot.jutsus[idx]
     local spellText = jutsu and jutsu.text and jutsu.text:trim() or ""
     if jutsu and jutsu.enabled ~= false and spellText:len() > 0 and isComboSpellReady(spellText) then
+      if not espCheckMacroDelay() then return end
+      if not g_game.isAttacking() or fugaActive then return end
+      say(spellText)
+      espMarkMacroUsed()
       local spellLower = spellText:lower()
       local predictedCd = getComboSpellCooldownMs(spellText)
       comboSpellCooldownUntil[spellLower] = now + predictedCd
-      local spellToCast = spellText
-      schedule(castOffset, function()
-        if g_game.isAttacking() and not isInPz() and not fugaActive then
-          say(spellToCast)
-          espMarkMacroUsed()
-        end
-      end)
-      castOffset = castOffset + COMBO_CAST_GAP_MS
+      comboNextJutsuIndex = (idx % total) + 1
+      return -- solta sequencialmente, um atras do outro, sem quebrar a ordem
     end
   end
 end

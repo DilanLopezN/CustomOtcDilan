@@ -1258,7 +1258,8 @@ MainWindow
     vertical-scrollbar: friendsScrollBar
     layout:
       type: verticalBox
-      fit-children: true
+      fit-children: false
+      spacing: 2
 
   VerticalScrollBar
     id: friendsScrollBar
@@ -1297,7 +1298,8 @@ MainWindow
     vertical-scrollbar: enemiesScrollBar
     layout:
       type: verticalBox
-      fit-children: true
+      fit-children: false
+      spacing: 2
 
   VerticalScrollBar
     id: enemiesScrollBar
@@ -1337,9 +1339,9 @@ MainWindow
       removeBtn:setId("feRemoveBtn")
       removeBtn:addAnchor(AnchorRight, "parent", AnchorRight)
       removeBtn:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
-      removeBtn:setMarginRight(4)
       removeBtn:setWidth(20)
       removeBtn:setHeight(18)
+      removeBtn:setMarginRight(4)
       removeBtn:setText("X")
       removeBtn:setColor("#FF5555")
       removeBtn:setTooltip("Remover da lista")
@@ -1349,7 +1351,7 @@ MainWindow
       senseBtn:addAnchor(AnchorRight, "feRemoveBtn", AnchorLeft)
       senseBtn:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
       senseBtn:setMarginRight(6)
-      senseBtn:setWidth(52)
+      senseBtn:setWidth(56)
       senseBtn:setHeight(18)
       senseBtn:setText("Sense")
       senseBtn:setColor("#AADDFF")
@@ -1360,6 +1362,7 @@ MainWindow
       nameLbl:addAnchor(AnchorLeft, "parent", AnchorLeft)
       nameLbl:addAnchor(AnchorRight, "feSenseBtn", AnchorLeft)
       nameLbl:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
+      nameLbl:setHeight(18)
       nameLbl:setMarginLeft(6)
       nameLbl:setMarginRight(6)
       nameLbl:setFont("verdana-11px-rounded")
@@ -1372,6 +1375,7 @@ MainWindow
         nameLbl:setColor("#FF4444")
       end
       nameLbl:setText(name)
+      nameLbl:setTooltip(name)
 
       removeBtn.onClick = function()
         if kind == "friends" then

@@ -1866,9 +1866,10 @@ _comboMacroCallback = function()
       local spellLower = spellText:lower()
       local predictedCd = getComboSpellCooldownMs(spellText)
       comboSpellCooldownUntil[spellLower] = now + predictedCd
+      local spellToCast = spellText
       schedule(castOffset, function()
         if g_game.isAttacking() and not isInPz() and not fugaActive then
-          say(spellText)
+          say(spellToCast)
           espMarkMacroUsed()
         end
       end)

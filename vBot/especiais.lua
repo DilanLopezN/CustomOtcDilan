@@ -197,7 +197,7 @@ UIWidget
     anchors.left: parent.left
     anchors.right: parent.horizontalCenter
     anchors.verticalCenter: parent.verticalCenter
-    margin-right: 1
+    margin-right: 0
     text-align: right
     font: verdana-11px-rounded
     color: #00FF88
@@ -209,7 +209,7 @@ UIWidget
     anchors.left: parent.horizontalCenter
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
-    margin-left: 1
+    margin-left: 0
     text-align: left
     font: verdana-11px-rounded
     color: #00FF88
@@ -1533,21 +1533,22 @@ local combosContent = espPanel3.scrollArea
 
 -- Macro placeholder (BotSwitch aparece no topo da aba)
 local _comboMacroCallback = nil
-local comboCurrentIndex = 1      -- indice do jutsu atual para execucao sequencial
 local comboLastTargetId = nil    -- id do ultimo alvo para detectar troca
 local comboLastSelected = nil    -- ultimo slot selecionado
-local comboLastCastTime = 0      -- timestamp do ultimo cast (ritmo interno do combo)
-local COMBO_MIN_INTERVAL_MS = 80 -- intervalo minimo entre jutsus do mesmo combo (fluidez)
+local COMBO_CAST_GAP_MS = 25     -- gap entre jutsus da mesma rajada (mantem ordem sem travar)
+local COMBO_ATTEMPT_INTERVAL_MS = 80
+local comboLastAttemptTime = 0
+local comboSpellCooldownUntil = {} -- [spellLower] = timestamp local para evitar recast antes do client atualizar CD
 
 -- Reset global do estado em tempo de execucao do combo (usado no reset de perfil)
 function espResetComboRuntime()
-  comboCurrentIndex = 1
   comboLastTargetId = nil
   comboLastSelected = nil
-  comboLastCastTime = 0
+  comboLastAttemptTime = 0
+  comboSpellCooldownUntil = {}
 end
 
--- Tick rapido para maior fluidez; o ritmo real e controlado por COMBO_MIN_INTERVAL_MS
+-- Tick rapido para resposta imediata; o ritmo real e controlado por COMBO_ATTEMPT_INTERVAL_MS
 EspComboMacro = macro(30, "Combo Especial", function()
   if _comboMacroCallback then _comboMacroCallback() end
 end, combosContent)
@@ -1625,7 +1626,8 @@ comboSelectPanel.comboSelect.onOptionChange = function(widget)
   local text = widget:getCurrentOption().text
   local idx = tonumber(text:match("^(%d+)%.")) or 1
   storage.esp_combo_selected = idx
-  comboCurrentIndex = 1  -- resetar indice ao trocar de combo
+  comboLastAttemptTime = 0
+  comboSpellCooldownUntil = {}
   refreshCombos()
 end
 
@@ -1796,73 +1798,82 @@ end
 updateComboSelect()
 refreshCombos()
 
--- ===== Macro callback: fluido e sincronizado =====
--- Fluidez: ritmo interno proprio (COMBO_MIN_INTERVAL_MS) independente do macro delay global,
--- permitindo sequencia rapida e consistente de jutsus.
--- Sincronizacao: pausa durante fuga ativa; reinicia ao trocar alvo/slot; respeita PZ.
+local function getComboSpellCooldownMs(spellText)
+  local spell = spellText:lower()
+  local data = getSpellData and getSpellData(spell) or nil
+  if data and data.exhaustion then
+    local ex = tonumber(data.exhaustion) or 0
+    if ex > 0 then
+      if ex < 100 then
+        return ex * 1000
+      end
+      return ex
+    end
+  end
+  return 900
+end
+
+local function isComboSpellReady(spellText)
+  local spell = spellText:lower()
+  local localCdEnd = comboSpellCooldownUntil[spell] or 0
+  if now < localCdEnd then
+    return false
+  end
+  if getSpellCoolDown then
+    return not getSpellCoolDown(spell)
+  end
+  return true
+end
+
+-- ===== Macro callback: rajada na ordem criada =====
+-- Tenta disparar TODOS os jutsus prontos em uma unica passada, preservando a ordem da lista.
+-- Cooldown e auto-detectado por getSpellCoolDown + fallback local por spell.
 _comboMacroCallback = function()
-  -- Pausar durante fuga ativa (sincronizacao com sistema de fugas)
   if fugaActive then
-    -- Ao sair da fuga, combo reinicia do jutsu 1 naturalmente porque o alvo pode ter mudado
     return
   end
   if isInPz() then return end
 
-  -- Precisa ter alvo atacando; sem alvo, reinicia o combo
   if not g_game.isAttacking() then
-    comboCurrentIndex = 1
     comboLastTargetId = nil
     return
   end
 
-  -- Resetar indice ao trocar de alvo (novo combo comeca do jutsu 1)
   local target = g_game.getAttackingCreature()
   local targetId = target and target:getId() or nil
   if targetId ~= comboLastTargetId then
-    comboCurrentIndex = 1
     comboLastTargetId = targetId
-    comboLastCastTime = 0  -- permite cast imediato no novo alvo
+    comboLastAttemptTime = 0
   end
 
-  -- Resetar indice ao trocar de slot selecionado
   local sel = storage.esp_combo_selected
   if sel ~= comboLastSelected then
-    comboCurrentIndex = 1
     comboLastSelected = sel
-    comboLastCastTime = 0
+    comboLastAttemptTime = 0
+    comboSpellCooldownUntil = {}
   end
 
-  -- Ritmo interno do combo (fluidez): evita spam no servidor mas mantem o fluxo rapido.
-  if now < comboLastCastTime + COMBO_MIN_INTERVAL_MS then return end
+  if now < comboLastAttemptTime + COMBO_ATTEMPT_INTERVAL_MS then return end
+  comboLastAttemptTime = now
 
   local slot = storage.esp_combo_slots[sel]
   if not slot or not slot.jutsus or #slot.jutsus == 0 then return end
 
-  local totalJutsus = #slot.jutsus
-  if comboCurrentIndex < 1 or comboCurrentIndex > totalJutsus then
-    comboCurrentIndex = 1
-  end
-
-  -- Encontrar proximo jutsu habilitado (pula desabilitados/vazios)
-  local startIndex = comboCurrentIndex
-  for _ = 1, totalJutsus do
-    local jutsu = slot.jutsus[comboCurrentIndex]
-    if jutsu and jutsu.text and jutsu.text:len() > 0 and jutsu.enabled ~= false then
-      say(jutsu.text)
-      -- Marca tambem o macro delay global para sincronizar com outros sistemas
-      espMarkMacroUsed()
-      comboLastCastTime = now
-      comboCurrentIndex = comboCurrentIndex + 1
-      if comboCurrentIndex > totalJutsus then
-        comboCurrentIndex = 1
-      end
-      return
+  local castOffset = 0
+  for _, jutsu in ipairs(slot.jutsus) do
+    local spellText = jutsu and jutsu.text and jutsu.text:trim() or ""
+    if jutsu and jutsu.enabled ~= false and spellText:len() > 0 and isComboSpellReady(spellText) then
+      local spellLower = spellText:lower()
+      local predictedCd = getComboSpellCooldownMs(spellText)
+      comboSpellCooldownUntil[spellLower] = now + predictedCd
+      schedule(castOffset, function()
+        if g_game.isAttacking() and not isInPz() and not fugaActive then
+          say(spellText)
+          espMarkMacroUsed()
+        end
+      end)
+      castOffset = castOffset + COMBO_CAST_GAP_MS
     end
-    comboCurrentIndex = comboCurrentIndex + 1
-    if comboCurrentIndex > totalJutsus then
-      comboCurrentIndex = 1
-    end
-    if comboCurrentIndex == startIndex then break end
   end
 end
 
@@ -4445,4 +4456,3 @@ if onGameEnd then
     _botPollActive = false
   end)
 end
-

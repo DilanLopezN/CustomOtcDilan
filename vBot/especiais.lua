@@ -1899,21 +1899,26 @@ _comboMacroCallback = function()
     comboNextJutsuIndex = 1
   end
 
+  if not espCheckMacroDelay() then return end
+
+  local castCount = 0
   for offset = 0, total - 1 do
     local idx = ((comboNextJutsuIndex + offset - 1) % total) + 1
     local jutsu = slot.jutsus[idx]
     local spellText = jutsu and jutsu.text and jutsu.text:trim() or ""
     if jutsu and jutsu.enabled ~= false and spellText:len() > 0 and isComboSpellReady(spellText) then
-      if not espCheckMacroDelay() then return end
       if not g_game.isAttacking() or fugaActive then return end
       say(spellText)
-      espMarkMacroUsed()
       local spellLower = spellText:lower()
       local predictedCd = getComboSpellCooldownMs(spellText)
       comboSpellCooldownUntil[spellLower] = now + predictedCd
       comboNextJutsuIndex = (idx % total) + 1
-      return -- solta sequencialmente, um atras do outro, sem quebrar a ordem
+      castCount = castCount + 1
     end
+  end
+
+  if castCount > 0 then
+    espMarkMacroUsed()
   end
 end
 

@@ -1174,7 +1174,7 @@ Panel
     FriendsWindow = g_ui.loadUIFromString([[
 MainWindow
   !text: tr('- Friends / Enemys -')
-  size: 400 460
+  size: 560 460
   color: #FF66CC
   @onEscape: self:hide()
 
@@ -1220,30 +1220,93 @@ MainWindow
     color: #FF4444
     text: + Enemy
 
-  ScrollablePanel
-    id: listPanel
+  Button
+    id: removeNameBtn
+    anchors.top: nameInput.top
+    anchors.left: addEnemyBtn.right
+    margin-left: 6
+    height: 22
+    width: 84
+    color: #FFAA44
+    text: - Remover
+
+  Label
+    id: friendsTitle
     anchors.top: nameInput.bottom
     anchors.left: parent.left
-    anchors.right: listScrollBar.left
-    anchors.bottom: closeButton.top
+    anchors.right: parent.horizontalCenter
     margin-top: 8
+    margin-left: 4
+    margin-right: 3
+    text: Friends
+    color: #00FF66
+    font: verdana-11px-rounded
+    text-align: center
+
+  ScrollablePanel
+    id: friendsListPanel
+    anchors.top: friendsTitle.bottom
+    anchors.left: parent.left
+    anchors.right: friendsScrollBar.left
+    anchors.bottom: closeButton.top
+    margin-top: 3
     margin-bottom: 6
     margin-left: 4
+    margin-right: 3
     border: 1 #444444
     background-color: #00000033
-    vertical-scrollbar: listScrollBar
+    vertical-scrollbar: friendsScrollBar
     layout:
       type: verticalBox
       fit-children: true
 
   VerticalScrollBar
-    id: listScrollBar
-    anchors.top: listPanel.top
-    anchors.bottom: listPanel.bottom
-    anchors.right: parent.right
+    id: friendsScrollBar
+    anchors.top: friendsListPanel.top
+    anchors.bottom: friendsListPanel.bottom
+    anchors.right: parent.horizontalCenter
+    margin-right: 3
     step: 20
     pixels-scroll: true
+
+  Label
+    id: enemiesTitle
+    anchors.top: nameInput.bottom
+    anchors.left: parent.horizontalCenter
+    anchors.right: parent.right
+    margin-top: 8
+    margin-left: 3
     margin-right: 4
+    text: Enemies
+    color: #FF4444
+    font: verdana-11px-rounded
+    text-align: center
+
+  ScrollablePanel
+    id: enemiesListPanel
+    anchors.top: enemiesTitle.bottom
+    anchors.left: parent.horizontalCenter
+    anchors.right: enemiesScrollBar.left
+    anchors.bottom: closeButton.top
+    margin-top: 3
+    margin-bottom: 6
+    margin-left: 3
+    margin-right: 4
+    border: 1 #444444
+    background-color: #00000033
+    vertical-scrollbar: enemiesScrollBar
+    layout:
+      type: verticalBox
+      fit-children: true
+
+  VerticalScrollBar
+    id: enemiesScrollBar
+    anchors.top: enemiesListPanel.top
+    anchors.bottom: enemiesListPanel.bottom
+    anchors.right: parent.right
+    margin-right: 4
+    step: 20
+    pixels-scroll: true
 
   Button
     id: closeButton
@@ -1254,15 +1317,17 @@ MainWindow
     size: 45 21
     margin-right: 5
     margin-bottom: 5
-]], rootW)
+  ]], rootW)
     FriendsWindow:hide()
 
-    local listPanel = FriendsWindow.listPanel
+    local friendsListPanel = FriendsWindow.friendsListPanel
+    local enemiesListPanel = FriendsWindow.enemiesListPanel
     local input = FriendsWindow.nameInput
     local refreshList
 
     local function makeRow(name, kind)
-      local row = g_ui.createWidget("Panel", listPanel)
+      local parentList = (kind == "friends") and friendsListPanel or enemiesListPanel
+      local row = g_ui.createWidget("Panel", parentList)
       row:setHeight(24)
       row:setBackgroundColor("alpha")
       row:addAnchor(AnchorLeft, "parent", AnchorLeft)
@@ -1298,6 +1363,7 @@ MainWindow
       nameLbl:setMarginLeft(6)
       nameLbl:setMarginRight(6)
       nameLbl:setFont("verdana-11px-rounded")
+      nameLbl:setTextAutoResize(false)
       nameLbl:setTextWrap(false)
       nameLbl:setTextAlign(AlignLeft)
       if kind == "friends" then
@@ -1329,11 +1395,12 @@ MainWindow
     end
 
     refreshList = function()
-      listPanel:destroyChildren()
+      friendsListPanel:destroyChildren()
+      enemiesListPanel:destroyChildren()
       local friends = storage.friends_enemies.friends or {}
       local enemies = storage.friends_enemies.enemies or {}
       if #friends == 0 and #enemies == 0 then
-        local empty = g_ui.createWidget("UILabel", listPanel)
+        local empty = g_ui.createWidget("UILabel", friendsListPanel)
         empty:setText("(lista vazia)")
         empty:setColor("gray")
         empty:setFont("verdana-11px-rounded")
@@ -1365,8 +1432,24 @@ MainWindow
       if feRefreshAllMarks then pcall(feRefreshAllMarks) end
     end
 
+    local function removeNames()
+      local txt = input:getText() or ""
+      local names = string.split(txt, ",")
+      for _, n in ipairs(names) do
+        local nm = n:trim()
+        if nm:len() > 0 then
+          feRemoveFriend(nm)
+          feRemoveEnemy(nm)
+        end
+      end
+      input:setText("")
+      refreshList()
+      if feRefreshAllMarks then pcall(feRefreshAllMarks) end
+    end
+
     FriendsWindow.addFriendBtn.onClick = function() addNames("friends") end
     FriendsWindow.addEnemyBtn.onClick = function() addNames("enemies") end
+    FriendsWindow.removeNameBtn.onClick = removeNames
 
     input.onKeyPress = function(widget, keyCode, keyboardModifiers)
       if keyCode == 5 then

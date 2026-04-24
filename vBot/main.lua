@@ -314,6 +314,7 @@ do
     storage.esp_trap_list = {}
     storage.esp_combo_slots = {}
     storage.esp_combo_selected = 1
+    storage.esp_combo_enabled = true
     storage.esp_buffs_list = {}
     storage.esp_ataque_list = {}
     storage.esp_stack_list = {}
@@ -350,6 +351,7 @@ do
     -- Combos (5 slots)
     data.esp_combo_slots = deepCopy(storage.esp_combo_slots or {})
     data.esp_combo_selected = storage.esp_combo_selected or 1
+    data.esp_combo_enabled = storage.esp_combo_enabled ~= false
     -- Buffs
     data.esp_buffs_list = deepCopy(storage.esp_buffs_list or {})
     -- Ataques
@@ -440,6 +442,9 @@ do
     if data.esp_combo_slots then
       storage.esp_combo_slots = fixNumericKeys(deepCopy(data.esp_combo_slots))
       storage.esp_combo_selected = data.esp_combo_selected or 1
+      if data.esp_combo_enabled ~= nil then
+        storage.esp_combo_enabled = data.esp_combo_enabled
+      end
     elseif data.esp_combo_list then
       -- Migrar formato antigo: lista unica -> slot 1
       storage.esp_combo_slots = {}
@@ -452,6 +457,7 @@ do
         end
       end
       storage.esp_combo_selected = 1
+      storage.esp_combo_enabled = true
     end
     if data.esp_buffs_list then storage.esp_buffs_list = fixNumericKeys(deepCopy(data.esp_buffs_list)) end
     if data.esp_ataque_list then storage.esp_ataque_list = fixNumericKeys(deepCopy(data.esp_ataque_list)) end
@@ -1335,36 +1341,13 @@ MainWindow
       row:addAnchor(AnchorLeft, "parent", AnchorLeft)
       row:addAnchor(AnchorRight, "parent", AnchorRight)
 
-      local removeBtn = g_ui.createWidget("Button", row)
-      removeBtn:setId("feRemoveBtn")
-      removeBtn:addAnchor(AnchorRight, "parent", AnchorRight)
-      removeBtn:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
-      removeBtn:setWidth(20)
-      removeBtn:setHeight(18)
-      removeBtn:setMarginRight(4)
-      removeBtn:setText("X")
-      removeBtn:setColor("#FF5555")
-      removeBtn:setTooltip("Remover da lista")
-
-      local senseBtn = g_ui.createWidget("Button", row)
-      senseBtn:setId("feSenseBtn")
-      senseBtn:addAnchor(AnchorRight, "feRemoveBtn", AnchorLeft)
-      senseBtn:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
-      senseBtn:setMarginRight(6)
-      senseBtn:setWidth(56)
-      senseBtn:setHeight(18)
-      senseBtn:setText("Sense")
-      senseBtn:setColor("#AADDFF")
-      senseBtn:setTooltip("Dar sense automatico nesse nome")
-
       local nameLbl = g_ui.createWidget("UILabel", row)
       nameLbl:setId("feNameLbl")
       nameLbl:addAnchor(AnchorLeft, "parent", AnchorLeft)
-      nameLbl:addAnchor(AnchorRight, "feSenseBtn", AnchorLeft)
       nameLbl:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
+      nameLbl:setWidth(118)
       nameLbl:setHeight(18)
       nameLbl:setMarginLeft(6)
-      nameLbl:setMarginRight(6)
       nameLbl:setFont("verdana-11px-rounded")
       nameLbl:setTextAutoResize(false)
       nameLbl:setTextWrap(false)
@@ -1376,6 +1359,28 @@ MainWindow
       end
       nameLbl:setText(name)
       nameLbl:setTooltip(name)
+
+      local senseBtn = g_ui.createWidget("Button", row)
+      senseBtn:setId("feSenseBtn")
+      senseBtn:addAnchor(AnchorLeft, "feNameLbl", AnchorRight)
+      senseBtn:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
+      senseBtn:setMarginLeft(4)
+      senseBtn:setWidth(56)
+      senseBtn:setHeight(18)
+      senseBtn:setText("Sense")
+      senseBtn:setColor("#AADDFF")
+      senseBtn:setTooltip("Dar sense automatico nesse nome")
+
+      local removeBtn = g_ui.createWidget("Button", row)
+      removeBtn:setId("feRemoveBtn")
+      removeBtn:addAnchor(AnchorLeft, "feSenseBtn", AnchorRight)
+      removeBtn:addAnchor(AnchorVerticalCenter, "parent", AnchorVerticalCenter)
+      removeBtn:setMarginLeft(4)
+      removeBtn:setWidth(20)
+      removeBtn:setHeight(18)
+      removeBtn:setText("X")
+      removeBtn:setColor("#FF5555")
+      removeBtn:setTooltip("Remover da lista")
 
       removeBtn.onClick = function()
         if kind == "friends" then

@@ -574,6 +574,7 @@ end)
 UI.Separator()
 UI.Label("Uteis Geral")
 
+UI.Label("ID da Kunai: 7382")
 addTextEdit("Kunai", storage.Kunai or "7382", function(widget, text)
     storage.Kunai = text
 end, scpPanel)

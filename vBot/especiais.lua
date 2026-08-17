@@ -1901,7 +1901,6 @@ _comboMacroCallback = function()
 
   if not espCheckMacroDelay() then return end
 
-  local castCount = 0
   for offset = 0, total - 1 do
     local idx = ((comboNextJutsuIndex + offset - 1) % total) + 1
     local jutsu = slot.jutsus[idx]
@@ -1913,12 +1912,9 @@ _comboMacroCallback = function()
       local predictedCd = getComboSpellCooldownMs(spellText)
       comboSpellCooldownUntil[spellLower] = now + predictedCd
       comboNextJutsuIndex = (idx % total) + 1
-      castCount = castCount + 1
+      espMarkMacroUsed()
+      return
     end
-  end
-
-  if castCount > 0 then
-    espMarkMacroUsed()
   end
 end
 
@@ -2147,7 +2143,6 @@ _buffMacroCallback = function()
   if fugaActive then return end
   if not espCheckMacroDelay() then return end
 
-  local usedAny = false
   for _, b in ipairs(storage.esp_buffs_list) do
     if b.text and b.text:len() > 0 and b.enabled ~= false then
       local uid = b.uid
@@ -2161,12 +2156,10 @@ _buffMacroCallback = function()
         say(b.text)
         buffActiveEnd[uid] = now + activeTimeMs
         buffCooldownEnd[uid] = now + activeTimeMs + cooldownMs
-        usedAny = true
+        espMarkMacroUsed()
+        return
       end
     end
-  end
-  if usedAny then
-    espMarkMacroUsed()
   end
 end
 
